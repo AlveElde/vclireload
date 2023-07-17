@@ -1,0 +1,103 @@
+#!/bin/sh
+
+#TODO: Only update files that have changed?
+#TODO: Feature request: vcli --quiet option
+#TODO: Feature request: vcli get id option
+#TODO: Add prefix to resource names
+
+usage() {
+	test $# -eq 1 &&
+	printf 'Error: %s.\n\n' "$1"
+
+	cat <<-EOF
+	Usage: $SCRIPT <vcl_dir> <main_vcl> <tags>
+	       $SCRIPT -h
+
+	Connect to an API-GW and (re)deploy a set of VCLs from a directory.
+
+	Available options:
+	-h           : show this help and exit
+
+	EOF
+	exit $#
+}
+
+fail() {
+	echo "Error: $*\n" >&2
+	exit 1
+}
+
+resource_exists() {
+	printf 'Checking if %s "%s" exists...\n' "$1" "$2"
+
+	vcli "$1" ls -f name="$2" > /dev/null
+}
+
+resource_add() {
+	if vcli "$1" add $2 $3 > /dev/null; then
+		printf 'Success: Added %s "%s": %s\n' "$1" "$2"
+	else
+		fail "Failed to add $1 \"$2\""
+	fi
+}
+
+resource_update() {
+	if vcli "$1" update -f name="$2" "$3" > /dev/null; then
+		printf 'Success: Updated %s "%s": %s\n' "$1" "$2"
+	else
+		fail "Failed to update $1 \"$2\""
+	fi
+}
+
+resource_add_if_none() {
+	if resource_exists "$1" "$2"; then
+		printf 'Success: %s "%s" already exists\n' "$1" "$2"
+	else
+		resource_add "$1" "$2" "$3"
+	fi
+}
+
+while getopts h: OPT
+do
+	case $OPT in
+	h) usage ;;
+	*) usage "wrong usage" >&2 ;;
+	esac
+done
+
+test $# -lt 3 && usage "too few arguments" >&2
+test $# -gt 3 && usage "too many arguments" >&2
+
+VCL_DIR=$1
+MAIN_VCL=$2
+TAGS=$3
+VCLGROUP='vcli-reload'
+DEPLOYMENT='vcli-reload_dc'
+VCL_LIST=$(ls $VCL_DIR | grep .*\.vcl)
+
+if ! vcli login; then
+	exit 1
+fi
+
+printf 'Deploying directory %s to tag %s \n' "$VCL_DIR" "$TAGS"
+
+# Add/update all files in VCL_DIR to the Controller
+for VCL in $VCL_LIST
+do
+	if resource_exists file "$VCL"; then
+		resource_update file "$VCL" "--file=$VCL_DIR/$VCL"
+	else
+		resource_add file "$VCL" "$VCL_DIR/$VCL"
+	fi
+done
+
+# Setuo tags
+resource_add_if_none tags "$TAGS"
+
+# Setup deployment
+resource_add_if_none deployment "$DEPLOYMENT"
+
+# Setup VCL Group
+DEPLOYMENT_ID=$(vcli deployment ls -f name="$DEPLOYMENT" --csv | awk -F ',' '{ if (NR == 2) { print $1; exit} }')
+MAIN_VCL_ID=$(vcli file ls -f name="$MAIN_VCL" --csv | awk -F ',' '{ if (NR == 2) { print $1; exit} }')
+resource_add_if_none vclgroup "$VCLGROUP" "--dep $DEPLOYMENT_ID --vcl $MAIN_VCL_ID"
