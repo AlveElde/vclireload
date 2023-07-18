@@ -27,6 +27,10 @@ fail() {
 	exit 1
 }
 
+resource_id() {
+	echo vcli "$1" ls -f name="$s2" --csv | awk -F ',' '{ if (NR == 2) { print $1; exit} }'
+}
+
 resource_exists() {
 	printf 'Checking if %s "%s" exists...\n' "$1" "$2"
 
@@ -46,6 +50,14 @@ resource_update() {
 		printf 'Success: Updated %s "%s": %s\n' "$1" "$2"
 	else
 		fail "Failed to update $1 \"$2\""
+	fi
+}
+
+resource_compile() {
+	if vcli "$1" compile -f name="$2" > /dev/null; then
+		printf 'Success: Compiled %s "%s": %s\n' "$1" "$2"
+	else
+		fail "Failed to compile $1 \"$2\""
 	fi
 }
 
@@ -76,7 +88,7 @@ DEPLOYMENT='vcli-reload_dc'
 VCL_LIST=$(ls $VCL_DIR | grep .*\.vcl)
 
 if ! vcli login; then
-	exit 1
+	fail "Login failed"
 fi
 
 printf 'Deploying directory %s to tag %s \n' "$VCL_DIR" "$TAGS"
@@ -98,6 +110,10 @@ resource_add_if_none tags "$TAGS"
 resource_add_if_none deployment "$DEPLOYMENT"
 
 # Setup VCL Group
-DEPLOYMENT_ID=$(vcli deployment ls -f name="$DEPLOYMENT" --csv | awk -F ',' '{ if (NR == 2) { print $1; exit} }')
-MAIN_VCL_ID=$(vcli file ls -f name="$MAIN_VCL" --csv | awk -F ',' '{ if (NR == 2) { print $1; exit} }')
+DEPLOYMENT_ID=$(resource_id deployment "$DEPLOYMENT")
+MAIN_VCL_ID=$(resource_id file "$MAIN_VCL")
 resource_add_if_none vclgroup "$VCLGROUP" "--dep $DEPLOYMENT_ID --vcl $MAIN_VCL_ID"
+
+# Compile the VCL group
+resource_compile vclgroup "$VCLGROUP"
+
