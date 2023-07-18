@@ -34,7 +34,7 @@ fail() {
 }
 
 resource_id() {
-	vcli "$1" ls -f name="$2" --csv | awk -F ',' '{ if (NR == 2) { print $1; exit} }'
+	(vcli "$1" ls -f name="$2" --csv 2> /dev/null) | awk -F ',' '{ if (NR == 2) { print $1; exit} }'
 }
 
 resource_add() {
@@ -135,7 +135,8 @@ printf 'Success: All tags up to date\n'
 # Add/update deployment
 DEPLOYMENT_ID=$(resource_id deployment "$DEPLOYMENT")
 if [ -z "$DEPLOYMENT_ID" ] ; then
-	resource_add deployment "$DEPLOYMENT" --tags "$TAGS_ID" --yes
+	resource_add deployment "$DEPLOYMENT" --tags "$TAGS_ID"
+	DEPLOYMENT_ID=$(resource_id deployment "$DEPLOYMENT")
 else
 	resource_update deployment "$DEPLOYMENT_ID" --tags "$TAGS_ID" --yes
 fi
@@ -146,7 +147,8 @@ printf 'Success: Deployment up to date\n'
 MAIN_VCL_ID=$(resource_id file "$MAIN_VCL")
 VCLGROUP_ID=$(resource_id vclgroup "$VCLGROUP")
 if [ -z "$VCLGROUP_ID" ] ; then
-	resource_add vclgroup "$VCLGROUP" "--dep $DEPLOYMENT_ID" "--vcl $MAIN_VCL_ID" --root
+	resource_add vclgroup "$VCLGROUP" --dep $DEPLOYMENT_ID --vcl $MAIN_VCL_ID --root
+	VCLGROUP_ID=$(resource_id vclgroup "$VCLGROUP")
 else
 	resource_update vclgroup "$VCLGROUP_ID" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" --root
 fi
@@ -154,7 +156,6 @@ fi
 printf 'Success: VCL Group up to date\n'
 
 # Compile the VCL group
-VCLGROUP_ID=$(resource_id vclgroup "$VCLGROUP")
 resource_compile vclgroup "$VCLGROUP_ID"
 
 # Deploy the VCL Group
