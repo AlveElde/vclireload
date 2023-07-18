@@ -4,6 +4,12 @@
 #TODO: Feature request: vcli --quiet option
 #TODO: Feature request: vcli get id option
 #TODO: Add prefix to resource names
+#TODO: Add support for multiple tags
+#TODO: Fail if main VCL is not found
+#TODO: Fix request: vcli vg add and update args are different
+#TODO: Silence error messages on vg/dep not found
+#TODO: Feature request: Fail vg compile if it fails
+
 
 usage() {
 	test $# -eq 1 &&
@@ -28,44 +34,56 @@ fail() {
 }
 
 resource_id() {
-	echo vcli "$1" ls -f name="$s2" --csv | awk -F ',' '{ if (NR == 2) { print $1; exit} }'
-}
-
-resource_exists() {
-	printf 'Checking if %s "%s" exists...\n' "$1" "$2"
-
-	vcli "$1" ls -f name="$2" > /dev/null
+	vcli "$1" ls -f name="$2" --csv | awk -F ',' '{ if (NR == 2) { print $1; exit} }'
 }
 
 resource_add() {
-	if vcli "$1" add $2 $3 > /dev/null; then
-		printf 'Success: Added %s "%s": %s\n' "$1" "$2"
+	RESOURCE="$1"
+	shift
+	if vcli "$RESOURCE" add "$@" > /dev/null; then
+		printf 'Success: Added %s "%s"\n' "$RESOURCE" "$1"
 	else
-		fail "Failed to add $1 \"$2\""
+		fail "Failed to add $RESOURCE \"$1\""
 	fi
 }
 
 resource_update() {
-	if vcli "$1" update -f name="$2" "$3" > /dev/null; then
-		printf 'Success: Updated %s "%s": %s\n' "$1" "$2"
+	RESOURCE="$1"
+	shift
+	if vcli "$RESOURCE" update "$@" > /dev/null; then
+		printf 'Success: Updated %s "%s"\n' "$RESOURCE" "$1"
 	else
-		fail "Failed to update $1 \"$2\""
+		fail "Failed to update $RESOURCE \"$1\""
 	fi
 }
 
 resource_compile() {
-	if vcli "$1" compile -f name="$2" > /dev/null; then
-		printf 'Success: Compiled %s "%s": %s\n' "$1" "$2"
+	RESOURCE="$1"
+	shift
+	if vcli "$RESOURCE" compile "$@" > /dev/null; then
+		printf 'Success: Compiled %s "%s"\n' "$RESOURCE" "$1"
 	else
-		fail "Failed to compile $1 \"$2\""
+		fail "Failed to compile $RESOURCE \"$1\""
 	fi
 }
 
-resource_add_if_none() {
-	if resource_exists "$1" "$2"; then
-		printf 'Success: %s "%s" already exists\n' "$1" "$2"
+resource_validate() {
+	RESOURCE="$1"
+	shift
+	if vcli "$RESOURCE" validate "$@" > /dev/null; then
+		printf 'Success: Validated %s "%s"\n' "$RESOURCE" "$1"
 	else
-		resource_add "$1" "$2" "$3"
+		fail "Failed to validate $RESOURCE \"$1\""
+	fi
+}
+
+resource_deploy() {
+	RESOURCE="$1"
+	shift
+	if vcli "$RESOURCE" deploy "$@" > /dev/null; then
+		printf 'Success: Deployed %s "%s"\n' "$RESOURCE" "$1"
+	else
+		fail "Failed to deploy $RESOURCE \"$1\""
 	fi
 }
 
@@ -93,27 +111,51 @@ fi
 
 printf 'Deploying directory %s to tag %s \n' "$VCL_DIR" "$TAGS"
 
-# Add/update all files in VCL_DIR to the Controller
+# Add/update files
 for VCL in $VCL_LIST
 do
-	if resource_exists file "$VCL"; then
-		resource_update file "$VCL" "--file=$VCL_DIR/$VCL"
-	else
+	VCL_ID=$(resource_id file "$VCL")
+	if [ -z "$VCL_ID" ] ; then
 		resource_add file "$VCL" "$VCL_DIR/$VCL"
+	else
+		resource_update file "$VCL_ID" --file="$VCL_DIR/$VCL"
 	fi
 done
 
-# Setuo tags
-resource_add_if_none tags "$TAGS"
+printf 'Success: All files up to date\n'
 
-# Setup deployment
-resource_add_if_none deployment "$DEPLOYMENT"
+# Add/update tags
+TAGS_ID=$(resource_id tags "$TAGS")
+if [ -z "$TAGS_ID" ] ; then
+	resource_add tags "$TAGS"
+fi
 
-# Setup VCL Group
+printf 'Success: All tags up to date\n'
+
+# Add/update deployment
 DEPLOYMENT_ID=$(resource_id deployment "$DEPLOYMENT")
+if [ -z "$DEPLOYMENT_ID" ] ; then
+	resource_add deployment "$DEPLOYMENT" --tags "$TAGS_ID" --yes
+else
+	resource_update deployment "$DEPLOYMENT_ID" --tags "$TAGS_ID" --yes
+fi
+
+printf 'Success: Deployment up to date\n'
+
+# Add/update VCL Group
 MAIN_VCL_ID=$(resource_id file "$MAIN_VCL")
-resource_add_if_none vclgroup "$VCLGROUP" "--dep $DEPLOYMENT_ID --vcl $MAIN_VCL_ID"
+VCLGROUP_ID=$(resource_id vclgroup "$VCLGROUP")
+if [ -z "$VCLGROUP_ID" ] ; then
+	resource_add vclgroup "$VCLGROUP" "--dep $DEPLOYMENT_ID" "--vcl $MAIN_VCL_ID" --root
+else
+	resource_update vclgroup "$VCLGROUP_ID" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" --root
+fi
+
+printf 'Success: VCL Group up to date\n'
 
 # Compile the VCL group
-resource_compile vclgroup "$VCLGROUP"
+VCLGROUP_ID=$(resource_id vclgroup "$VCLGROUP")
+resource_compile vclgroup "$VCLGROUP_ID"
 
+# Deploy the VCL Group
+resource_deploy vclgroup "$VCLGROUP_ID"
