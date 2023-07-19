@@ -1,32 +1,33 @@
 #!/bin/sh
 
-#TODO: Only update files that have changed?
 #TODO: Feature request: vcli --quiet option
-#TODO: Feature request: vcli get id option
-#TODO: Add prefix to resource names
+#TODO: Feature request: vcli return id option
 #TODO: Add support for multiple tags
-#TODO: Fail if main VCL is not found
-#TODO: Fix request: vcli vg add and update args are different
-#TODO: Silence error messages on vg/dep not found
-#TODO: Feature request: Fail vg compile if it fails
-#TODO: Allow multiple paths in VCL_PATH
-#TODO: How to handle login creds?
+#TODO: Add support for multiple paths in VCL_PATH
+#TODO: Add support for shared deployments
+#TODO: Add support for automatically detecting VCL includes
+#TODO: Add support for routing rules
+#TODO: Add support for staged deployments
+#TODO: Add support for drafts and rollbacks
+#TODO: Add test suite
 
 usage() {
 	test $# -eq 1 &&
 	printf 'Error: %s.\n\n' "$1"
 
 	cat <<-EOF
-	Usage: $SCRIPT -p <VCL path> -f <Main VCL> -g <VCL Group> -t <tags>
+	Usage: $SCRIPT -g <VCL Group> -t <tags> -f <Main VCL> -p <VCL Path>
 	       $SCRIPT -h
 
-	Connect to an API-GW and (re)deploy a set of VCLs from a directory.
+	Connect to Varnish Controller and (re)deploy a VCL Group. This script
+	relies on vcli, so please ensure that varnish-controller-cli is
+	installed.
 
 	Available options:
-	-p           : Path to one or more VCL directories
-	-f           : Name of the Main VCL
 	-g           : Name of the VCL Group
 	-t           : Deployment tags
+	-f           : Name of the Main VCL
+	-p           : Path to VCL directory
 	-h           : show this help and exit
 
 	EOF
@@ -54,18 +55,20 @@ while getopts h:p:f:g:t: OPT
 do
 	case $OPT in
 	h) usage ;;
-	p) VCL_PATH=$OPTARG ;;
-	f) MAIN_VCL=$OPTARG ;;
-	t) TAGS=$OPTARG ;;
 	g) VCLGROUP=$OPTARG ;;
+	t) TAGS=$OPTARG ;;
+	f) MAIN_VCL=$OPTARG ;;
+	p) VCL_PATH=$OPTARG ;;
 	*) usage "wrong usage" >&2 ;;
 	esac
 done
 
-test $# -lt 8 && usage "too few arguments" >&2
-test $# -gt 8 && usage "too many arguments" >&2
+test -z "$VCLGROUP" && usage "-g <VCL Group> is required" >&2
+test -z "$TAGS" && usage "-t <tags> is required" >&2
+test -z "$MAIN_VCL" && usage "-f <Main VCL> is required" >&2
+test -z "$VCL_PATH" && usage "-p <VCL Path> is required" >&2
 
-printf 'Reloading Main VCL: "%s", VCL path: "%s", tags: "%s"\n' "$MAIN_VCL" "$VCL_PATH" "$TAGS"
+echo "Reloading VCL Group $VCLGROUP (Main VCL: $MAIN_VCL, VCL path: $VCL_PATH, tags: $TAGS"
 
 DEPLOYMENT="${VCLGROUP}_dc"
 VCL_LIST=$(ls $VCL_PATH | grep .*\.vcl)
@@ -137,10 +140,10 @@ fi
 
 VCLGROUP_ID=$(vcli_run_quiet vclgroup ls -f name="$VCLGROUP")
 if [ "$VCLGROUP_ID" -eq "0" ] ; then
-	echo "Adding VCL Group $VCLGROUP (--dep: $DEPLOYMENT_ID, --vcl: $MAIN_VCL_ID, --inc: $INCLUDES_ID --root)"
+	echo "Adding VCL Group $VCLGROUP (--dep: $DEPLOYMENT_ID, --vcl: $MAIN_VCL_ID, --inc: $INCLUDES_ID, --root)"
 	VCLGROUP_ID=$(vcli_run vclgroup add "$VCLGROUP" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" --inc "$INCLUDES_ID" --root)
 else
-	echo "Updating VCL Group $VCLGROUP (id: $VCLGROUP_ID, d--ep: $DEPLOYMENT_ID, --vcl: $MAIN_VCL_ID, --inc: $INCLUDES_ID --root)"
+	echo "Updating VCL Group $VCLGROUP (id: $VCLGROUP_ID, --dep: $DEPLOYMENT_ID, --vcl: $MAIN_VCL_ID, --inc: $INCLUDES_ID, --root)"
 	VCLGROUP_ID=$(vcli_run vclgroup update "$VCLGROUP_ID" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" --inc "$INCLUDES_ID" --root --yes)
 fi
 
@@ -150,7 +153,7 @@ else
 	echo "Success: VCL Group has id $VCLGROUP_ID"
 fi
 
-### Compile the VCL group ###
+### Compile the VCL Group ###
 
 echo "Compiling VCL Group $VCLGROUP (id: $VCLGROUP_ID)"
 VCLGROUP_ID=$(vcli_run vclgroup compile "$VCLGROUP_ID")

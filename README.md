@@ -7,7 +7,7 @@ This script aims to simplify automated VCL deployments through the Varnish Contr
 ## Usage
 
 ```
-vclireload -p <VCL path> -f <Main VCL> -g <VCL Group> -t <tags>
+vclireload -g <VCL Group> -t <tags> -f <Main VCL> -p <VCL Path>
 ```
 
 For the moment, the script expects the appropriate environment variables to be set for `vcli login` to succeed. This means the current environment variables should be set:
