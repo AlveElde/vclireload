@@ -10,7 +10,7 @@
 #TODO: Silence error messages on vg/dep not found
 #TODO: Feature request: Fail vg compile if it fails
 #TODO: Allow multiple paths in VCL_PATH
-
+#TODO: How to handle login creds?
 
 usage() {
 	test $# -eq 1 &&
@@ -23,6 +23,9 @@ usage() {
 	Connect to an API-GW and (re)deploy a set of VCLs from a directory.
 
 	Available options:
+	-p           : Path to one or more VCL directories
+	-f           : Name of the Main VCL
+	-t           : VCL Group tags
 	-h           : show this help and exit
 
 	EOF
@@ -30,62 +33,20 @@ usage() {
 }
 
 fail() {
-	echo "Error: $*\n" >&2
+	echo "$*\n" >&2
 	exit 1
 }
 
-resource_id() {
-	(vcli "$1" ls -f name="$2" --csv 2> /dev/null) | awk -F ',' '{ if (NR == 2) { print $1; exit} }'
+awk_id() {
+	awk -F ',' 'BEGIN { id = 0 } { if (NR == 2) {id=$1; exit} } END { print id }'
 }
 
-resource_add() {
-	RESOURCE="$1"
-	shift
-	if vcli "$RESOURCE" add "$@" > /dev/null; then
-		printf 'Success: Added %s "%s"\n' "$RESOURCE" "$1"
-	else
-		fail "Failed to add $RESOURCE \"$1\""
-	fi
+vcli_run_quiet() {
+	(vcli "$@" 2> /dev/null --csv) | awk_id
 }
 
-resource_update() {
-	RESOURCE="$1"
-	shift
-	if vcli "$RESOURCE" update "$@" > /dev/null; then
-		printf 'Success: Updated %s "%s"\n' "$RESOURCE" "$1"
-	else
-		fail "Failed to update $RESOURCE \"$1\""
-	fi
-}
-
-resource_compile() {
-	RESOURCE="$1"
-	shift
-	if vcli "$RESOURCE" compile "$@" > /dev/null; then
-		printf 'Success: Compiled %s "%s"\n' "$RESOURCE" "$1"
-	else
-		fail "Failed to compile $RESOURCE \"$1\""
-	fi
-}
-
-resource_validate() {
-	RESOURCE="$1"
-	shift
-	if vcli "$RESOURCE" validate "$@" > /dev/null; then
-		printf 'Success: Validated %s "%s"\n' "$RESOURCE" "$1"
-	else
-		fail "Failed to validate $RESOURCE \"$1\""
-	fi
-}
-
-resource_deploy() {
-	RESOURCE="$1"
-	shift
-	if vcli "$RESOURCE" deploy "$@" > /dev/null; then
-		printf 'Success: Deployed %s "%s"\n' "$RESOURCE" "$1"
-	else
-		fail "Failed to deploy $RESOURCE \"$1\""
-	fi
+vcli_run() {
+	(vcli "$@" --csv) | awk_id
 }
 
 while getopts h:p:f:t: OPT
@@ -112,60 +73,98 @@ if ! vcli login; then
 	fail "Login failed"
 fi
 
-# Add/update files
+### Add/update files ###
+
 for VCL in $VCL_LIST
 do
-	VCL_ID=$(resource_id file "$VCL")
-	if [ -z "$VCL_ID" ] ; then
-		printf 'Adding %s\n' "$VCL_PATH/$VCL"
-		resource_add file "$VCL" "$VCL_PATH/$VCL"
+	VCL_ID=$(vcli_run_quiet file ls -f name="$VCL")
+	if [ "$VCL_ID" -eq "0" ] ; then
+		echo "Adding File $VCL_PATH/$VCL"
+		VCL_ID=$(vcli_run file add "$VCL" "$VCL_PATH/$VCL")
 	else
-		resource_update file "$VCL_ID" --file="$VCL_PATH/$VCL"
+		echo "Updating File $VCL_PATH/$VCL"
+		VCL_ID=$(vcli_run file update "$VCL_ID" --file="$VCL_PATH/$VCL")
+	fi
+
+	if [ "$VCL_ID" -eq "0" ] ; then
+		fail "Error, failed to add/update File $VCL_PATH/$VCL"
+	else
+		echo "Success: File has id $VCL_ID"
 	fi
 
 	if [ "$VCL" = "$MAIN_VCL" ] ; then
-		MAIN_VCL_ID=$(resource_id file "$VCL")
+		MAIN_VCL_ID="$VCL_ID"
 	elif [ -z "$INCLUDES_ID" ] ; then
-		INCLUDES_ID=$(resource_id file "$VCL")
+		INCLUDES_ID="$VCL_ID"
 	else
-		INCLUDES_ID="$INCLUDES_ID,$(resource_id file $VCL)"
+		INCLUDES_ID="$INCLUDES_ID,$VCL_ID"
 	fi
 done
 
-printf 'Success: All files up to date\n'
+### Add Tags ###
 
-# Add/update tags
-TAGS_ID=$(resource_id tags "$TAGS")
-if [ -z "$TAGS_ID" ] ; then
-	resource_add tags "$TAGS"
+TAGS_ID=$(vcli_run_quiet tags ls -f name="$TAGS")
+if [ "$TAGS_ID" -eq "0" ] ; then
+	echo "Adding tags $TAGS"
+	TAGS_ID=$(vcli_run tags add "$TAGS")
 fi
 
-printf 'Success: All tags up to date\n'
-
-# Add/update deployment
-DEPLOYMENT_ID=$(resource_id deployment "$DEPLOYMENT")
-if [ -z "$DEPLOYMENT_ID" ] ; then
-	resource_add deployment "$DEPLOYMENT" --tags "$TAGS_ID"
-	DEPLOYMENT_ID=$(resource_id deployment "$DEPLOYMENT")
+if [ "$TAGS_ID" -eq "0" ] ; then
+	fail "Error, failed to add tags $TAGS"
 else
-	resource_update deployment "$DEPLOYMENT_ID" --tags "$TAGS_ID" --yes
+	echo "Success: Tags have id $VCL_ID"
 fi
 
-printf 'Success: Deployment up to date\n'
+### Add/update Deployment ###
 
-# Add/update VCL Group
-VCLGROUP_ID=$(resource_id vclgroup "$VCLGROUP")
-if [ -z "$VCLGROUP_ID" ] ; then
-	resource_add vclgroup "$VCLGROUP" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" --inc "$INCLUDES_ID" --root
-	VCLGROUP_ID=$(resource_id vclgroup "$VCLGROUP")
+DEPLOYMENT_ID=$(vcli_run_quiet file ls -f name="$DEPLOYMENT")
+if [ "$DEPLOYMENT_ID" -eq "0" ] ; then
+	echo "Adding Deployment $DEPLOYMENT (--tags: $TAGS_ID)"
+	DEPLOYMENT_ID=$(vcli_run deployment add "$DEPLOYMENT" --tags "$TAGS_ID")
 else
-	resource_update vclgroup "$VCLGROUP_ID" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" --inc "$INCLUDES_ID" --root --yes
+	echo "Updating Deployment $DEPLOYMENT (id: $DEPLOYMENT_ID, --tags: $TAGS_ID)"
+	DEPLOYMENT_ID=$(vcli_run deployment update "$DEPLOYMENT_ID" --tags "$TAGS_ID" --yes)
 fi
 
-printf 'Success: VCL Group up to date\n'
+if [ "$DEPLOYMENT_ID" -eq "0" ] ; then
+	fail "Error, failed to add/update deployment $DEPLOYMENT"
+else
+	echo "Success: Deployment has id $DEPLOYMENT_ID"
+fi
 
-# Compile the VCL group
-resource_compile vclgroup "$VCLGROUP_ID"
+### Add/update VCL Group ###
 
-# Deploy the VCL Group
-resource_deploy vclgroup "$VCLGROUP_ID"
+VCLGROUP_ID=$(vcli_run_quiet vclgroup ls -f name="$VCLGROUP")
+if [ "$VCLGROUP_ID" -eq "0" ] ; then
+	echo "Adding VCL Group $VCLGROUP (--dep: $DEPLOYMENT_ID, --vcl: $MAIN_VCL_ID, --inc: $INCLUDES_ID --root)"
+	VCLGROUP_ID=$(vcli_run vclgroup add "$VCLGROUP" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" --inc "$INCLUDES_ID" --root)
+else
+	echo "Updating VCL Group $VCLGROUP (id: $VCLGROUP_ID, d--ep: $DEPLOYMENT_ID, --vcl: $MAIN_VCL_ID, --inc: $INCLUDES_ID --root)"
+	VCLGROUP_ID=$(vcli_run vclgroup update "$VCLGROUP_ID" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" --inc "$INCLUDES_ID" --root --yes)
+fi
+
+if [ "$VCLGROUP_ID" -eq "0" ] ; then
+	fail "Error, failed to add/update VCL Group"
+else
+	echo "Success: VCL Group has id $VCLGROUP_ID"
+fi
+
+### Compile the VCL group ###
+
+echo "Compiling VCL Group $VCLGROUP (id: $VCLGROUP_ID)"
+VCLGROUP_ID=$(vcli_run vclgroup compile "$VCLGROUP_ID")
+if [ "$VCLGROUP_ID" -eq "0" ] ; then
+	fail "Error, failed to compile VCL Group"
+else
+	echo "Success: VCL Group compiled"
+fi
+
+### Deploy the VCL Group ##
+
+echo "Deploying VCL Group $VCLGROUP (id: $VCLGROUP_ID)"
+VCLGROUP_ID=$(vcli_run vclgroup deploy "$VCLGROUP_ID")
+if [ "$VCLGROUP_ID" -eq "0" ] ; then
+	fail "Error, failed to deploy VCL Group"
+else
+	echo "Success: VCL Group deployed"
+fi
