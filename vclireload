@@ -17,7 +17,7 @@ usage() {
 	printf 'Error: %s.\n\n' "$1"
 
 	cat <<-EOF
-	Usage: $SCRIPT -p <VCL path> -f <Main VCL> -t <tags>
+	Usage: $SCRIPT -p <VCL path> -f <Main VCL> -g <VCL Group> -t <tags>
 	       $SCRIPT -h
 
 	Connect to an API-GW and (re)deploy a set of VCLs from a directory.
@@ -25,7 +25,8 @@ usage() {
 	Available options:
 	-p           : Path to one or more VCL directories
 	-f           : Name of the Main VCL
-	-t           : VCL Group tags
+	-g           : Name of the VCL Group
+	-t           : Deployment tags
 	-h           : show this help and exit
 
 	EOF
@@ -49,24 +50,24 @@ vcli_run() {
 	(vcli "$@" --csv) | awk_id
 }
 
-while getopts h:p:f:t: OPT
+while getopts h:p:f:g:t: OPT
 do
 	case $OPT in
 	h) usage ;;
 	p) VCL_PATH=$OPTARG ;;
 	f) MAIN_VCL=$OPTARG ;;
 	t) TAGS=$OPTARG ;;
+	g) VCLGROUP=$OPTARG ;;
 	*) usage "wrong usage" >&2 ;;
 	esac
 done
 
-test $# -lt 6 && usage "too few arguments" >&2
-test $# -gt 6 && usage "too many arguments" >&2
+test $# -lt 8 && usage "too few arguments" >&2
+test $# -gt 8 && usage "too many arguments" >&2
 
 printf 'Reloading Main VCL: "%s", VCL path: "%s", tags: "%s"\n' "$MAIN_VCL" "$VCL_PATH" "$TAGS"
 
-VCLGROUP='vcli-reload'
-DEPLOYMENT='vcli-reload_dc'
+DEPLOYMENT="${VCLGROUP}_dc"
 VCL_LIST=$(ls $VCL_PATH | grep .*\.vcl)
 
 if ! vcli login; then
