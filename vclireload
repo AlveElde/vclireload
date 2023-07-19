@@ -9,6 +9,7 @@
 #TODO: Fix request: vcli vg add and update args are different
 #TODO: Silence error messages on vg/dep not found
 #TODO: Feature request: Fail vg compile if it fails
+#TODO: Allow multiple paths in VCL_PATH
 
 
 usage() {
@@ -16,7 +17,7 @@ usage() {
 	printf 'Error: %s.\n\n' "$1"
 
 	cat <<-EOF
-	Usage: $SCRIPT <vcl_dir> <main_vcl> <tags>
+	Usage: $SCRIPT -p <VCL path> -f <Main VCL> -t <tags>
 	       $SCRIPT -h
 
 	Connect to an API-GW and (re)deploy a set of VCLs from a directory.
@@ -87,38 +88,47 @@ resource_deploy() {
 	fi
 }
 
-while getopts h: OPT
+while getopts h:p:f:t: OPT
 do
 	case $OPT in
 	h) usage ;;
+	p) VCL_PATH=$OPTARG ;;
+	f) MAIN_VCL=$OPTARG ;;
+	t) TAGS=$OPTARG ;;
 	*) usage "wrong usage" >&2 ;;
 	esac
 done
 
-test $# -lt 3 && usage "too few arguments" >&2
-test $# -gt 3 && usage "too many arguments" >&2
+test $# -lt 6 && usage "too few arguments" >&2
+test $# -gt 6 && usage "too many arguments" >&2
 
-VCL_DIR=$1
-MAIN_VCL=$2
-TAGS=$3
+printf 'Reloading Main VCL: "%s", VCL path: "%s", tags: "%s"\n' "$MAIN_VCL" "$VCL_PATH" "$TAGS"
+
 VCLGROUP='vcli-reload'
 DEPLOYMENT='vcli-reload_dc'
-VCL_LIST=$(ls $VCL_DIR | grep .*\.vcl)
+VCL_LIST=$(ls $VCL_PATH | grep .*\.vcl)
 
 if ! vcli login; then
 	fail "Login failed"
 fi
-
-printf 'Deploying directory %s to tag %s \n' "$VCL_DIR" "$TAGS"
 
 # Add/update files
 for VCL in $VCL_LIST
 do
 	VCL_ID=$(resource_id file "$VCL")
 	if [ -z "$VCL_ID" ] ; then
-		resource_add file "$VCL" "$VCL_DIR/$VCL"
+		printf 'Adding %s\n' "$VCL_PATH/$VCL"
+		resource_add file "$VCL" "$VCL_PATH/$VCL"
 	else
-		resource_update file "$VCL_ID" --file="$VCL_DIR/$VCL"
+		resource_update file "$VCL_ID" --file="$VCL_PATH/$VCL"
+	fi
+
+	if [ "$VCL" = "$MAIN_VCL" ] ; then
+		MAIN_VCL_ID=$(resource_id file "$VCL")
+	elif [ -z "$INCLUDES_ID" ] ; then
+		INCLUDES_ID=$(resource_id file "$VCL")
+	else
+		INCLUDES_ID="$INCLUDES_ID,$(resource_id file $VCL)"
 	fi
 done
 
@@ -144,13 +154,12 @@ fi
 printf 'Success: Deployment up to date\n'
 
 # Add/update VCL Group
-MAIN_VCL_ID=$(resource_id file "$MAIN_VCL")
 VCLGROUP_ID=$(resource_id vclgroup "$VCLGROUP")
 if [ -z "$VCLGROUP_ID" ] ; then
-	resource_add vclgroup "$VCLGROUP" --dep $DEPLOYMENT_ID --vcl $MAIN_VCL_ID --root
+	resource_add vclgroup "$VCLGROUP" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" --inc "$INCLUDES_ID" --root
 	VCLGROUP_ID=$(resource_id vclgroup "$VCLGROUP")
 else
-	resource_update vclgroup "$VCLGROUP_ID" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" --root
+	resource_update vclgroup "$VCLGROUP_ID" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" --inc "$INCLUDES_ID" --root --yes
 fi
 
 printf 'Success: VCL Group up to date\n'
