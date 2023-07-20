@@ -1,14 +1,14 @@
-#!/bin/sh
+#!/bin/bash
 
 #TODO: Feature request: vcli --quiet option
 #TODO: Feature request: vcli return id option
-#TODO: Add support for multiple tags
 #TODO: Add support for multiple paths in VCL_PATH
 #TODO: Add support for shared deployments
 #TODO: Add support for automatically detecting VCL includes
 #TODO: Add support for routing rules
 #TODO: Add support for staged deployments
 #TODO: Add support for drafts and rollbacks
+#TODO: Add support for tagging agents?
 #TODO: Add test suite
 
 usage() {
@@ -105,28 +105,39 @@ do
 	fi
 done
 
+test -z "$MAIN_VCL_ID" && fail "Main VCL $MAIN_VCL did not match any VCLs in $VCL_PATH"
+
 ### Add Tags ###
 
-TAGS_ID=$(vcli_run_quiet tags ls -f name="$TAGS")
-if [ "$TAGS_ID" -eq "0" ] ; then
-	echo "Adding tags $TAGS"
-	TAGS_ID=$(vcli_run tags add "$TAGS")
-fi
+for TAG in ${TAGS//,/ }
+do
+	TAG_ID=$(vcli_run_quiet tags ls -f name="$TAG")
+	if [ "$TAG_ID" -eq "0" ] ; then
+		echo "Adding tag $TAG"
+		TAG_ID=$(vcli_run tags add "$TAG")
+	fi
 
-if [ "$TAGS_ID" -eq "0" ] ; then
-	fail "Error, failed to add tags $TAGS"
-else
-	echo "Success: Tags have id $VCL_ID"
-fi
+	if [ "$TAG_ID" -eq "0" ] ; then
+		fail "Error, failed to add tag $TAG"
+	else
+		echo "Success: Tag has id $TAG_ID"
+	fi
+
+	if [ -z "$TAGS_ID" ] ; then
+		TAGS_ID="$TAG_ID"
+	else
+		TAGS_ID="$TAGS_ID,$TAG_ID"
+	fi
+done
 
 ### Add/update Deployment ###
 
 DEPLOYMENT_ID=$(vcli_run_quiet file ls -f name="$DEPLOYMENT")
 if [ "$DEPLOYMENT_ID" -eq "0" ] ; then
-	echo "Adding Deployment $DEPLOYMENT (--tags: $TAGS_ID)"
+	echo "Adding Deployment $DEPLOYMENT (--tags $TAGS_ID)"
 	DEPLOYMENT_ID=$(vcli_run deployment add "$DEPLOYMENT" --tags "$TAGS_ID")
 else
-	echo "Updating Deployment $DEPLOYMENT (id: $DEPLOYMENT_ID, --tags: $TAGS_ID)"
+	echo "Updating Deployment $DEPLOYMENT (id: $DEPLOYMENT_ID --tags $TAGS_ID)"
 	DEPLOYMENT_ID=$(vcli_run deployment update "$DEPLOYMENT_ID" --tags "$TAGS_ID" --yes)
 fi
 
@@ -140,10 +151,10 @@ fi
 
 VCLGROUP_ID=$(vcli_run_quiet vclgroup ls -f name="$VCLGROUP")
 if [ "$VCLGROUP_ID" -eq "0" ] ; then
-	echo "Adding VCL Group $VCLGROUP (--dep: $DEPLOYMENT_ID, --vcl: $MAIN_VCL_ID, --inc: $INCLUDES_ID, --root)"
+	echo "Adding VCL Group $VCLGROUP (--dep $DEPLOYMENT_ID --vcl $MAIN_VCL_ID --inc $INCLUDES_ID --root)"
 	VCLGROUP_ID=$(vcli_run vclgroup add "$VCLGROUP" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" --inc "$INCLUDES_ID" --root)
 else
-	echo "Updating VCL Group $VCLGROUP (id: $VCLGROUP_ID, --dep: $DEPLOYMENT_ID, --vcl: $MAIN_VCL_ID, --inc: $INCLUDES_ID, --root)"
+	echo "Updating VCL Group $VCLGROUP (id: $VCLGROUP_ID --dep $DEPLOYMENT_ID --vcl $MAIN_VCL_ID --inc $INCLUDES_ID --root)"
 	VCLGROUP_ID=$(vcli_run vclgroup update "$VCLGROUP_ID" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" --inc "$INCLUDES_ID" --root --yes)
 fi
 
