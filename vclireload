@@ -68,7 +68,7 @@ test -z "$TAGS" && usage "-t <tags> is required" >&2
 test -z "$MAIN_VCL" && usage "-f <Main VCL> is required" >&2
 test -z "$VCL_PATH" && usage "-p <VCL Path> is required" >&2
 
-echo "Reloading VCL Group $VCLGROUP (Main VCL: $MAIN_VCL, VCL path: $VCL_PATH, tags: $TAGS"
+echo "Reloading VCL Group $VCLGROUP (Main VCL: $MAIN_VCL, VCL path: $VCL_PATH, tags: $TAGS)"
 
 DEPLOYMENT="${VCLGROUP}_dc"
 VCL_LIST=$(ls $VCL_PATH | grep .*\.vcl)
@@ -132,7 +132,7 @@ done
 
 ### Add/update Deployment ###
 
-DEPLOYMENT_ID=$(vcli_run_quiet file ls -f name="$DEPLOYMENT")
+DEPLOYMENT_ID=$(vcli_run_quiet deployment ls -f name="$DEPLOYMENT")
 if [ "$DEPLOYMENT_ID" -eq "0" ] ; then
 	echo "Adding Deployment $DEPLOYMENT (--tags $TAGS_ID)"
 	DEPLOYMENT_ID=$(vcli_run deployment add "$DEPLOYMENT" --tags "$TAGS_ID")
