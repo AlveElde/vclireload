@@ -4,11 +4,9 @@
 #TODO: Feature request: vcli return id option
 #TODO: Add support for multiple paths in VCL_PATH
 #TODO: Add support for shared deployments
-#TODO: Add support for automatically detecting VCL includes
 #TODO: Add support for routing rules
-#TODO: Add support for staged deployments
-#TODO: Add support for drafts and rollbacks
-#TODO: Add support for tagging agents?
+#TODO: Add defaults (-g vclireload, -t vclireload -f default.vcl, -p $CWD)
+#TODO: Don't update deployment if using default tag
 #TODO: Add test suite
 
 usage() {
@@ -28,6 +26,7 @@ usage() {
 	-t           : Deployment tags
 	-f           : Name of the Main VCL
 	-p           : Path to VCL directory
+	-d           : (Reserved) Domains
 	-h           : show this help and exit
 
 	EOF
@@ -73,6 +72,8 @@ echo "Reloading VCL Group $VCLGROUP (Main VCL: $MAIN_VCL, VCL path: $VCL_PATH, t
 DEPLOYMENT="${VCLGROUP}_dc"
 VCL_LIST=$(ls $VCL_PATH | grep .*\.vcl)
 
+test -z "$VCL_LIST" && fail "No VCLs found at $VCL_PATH"
+
 if ! vcli login; then
 	fail "Login failed"
 fi
@@ -93,7 +94,7 @@ do
 	if [ "$VCL_ID" -eq "0" ] ; then
 		fail "Error, failed to add/update File $VCL_PATH/$VCL"
 	else
-		echo "Success: File has id $VCL_ID"
+		echo "Success: File $VCL has id $VCL_ID"
 	fi
 
 	if [ "$VCL" = "$MAIN_VCL" ] ; then
@@ -120,7 +121,7 @@ do
 	if [ "$TAG_ID" -eq "0" ] ; then
 		fail "Error, failed to add tag $TAG"
 	else
-		echo "Success: Tag has id $TAG_ID"
+		echo "Success: Tag $TAG has id $TAG_ID"
 	fi
 
 	if [ -z "$TAGS_ID" ] ; then
@@ -144,7 +145,7 @@ fi
 if [ "$DEPLOYMENT_ID" -eq "0" ] ; then
 	fail "Error, failed to add/update deployment $DEPLOYMENT"
 else
-	echo "Success: Deployment has id $DEPLOYMENT_ID"
+	echo "Success: Deployment $DEPLOYMENT has id $DEPLOYMENT_ID"
 fi
 
 ### Add/update VCL Group ###
@@ -159,9 +160,9 @@ else
 fi
 
 if [ "$VCLGROUP_ID" -eq "0" ] ; then
-	fail "Error, failed to add/update VCL Group"
+	fail "Error, failed to add/update VCL Group $VCLGROUP"
 else
-	echo "Success: VCL Group has id $VCLGROUP_ID"
+	echo "Success: VCL Group $VCLGROUP has id $VCLGROUP_ID"
 fi
 
 ### Compile the VCL Group ###
@@ -169,9 +170,9 @@ fi
 echo "Compiling VCL Group $VCLGROUP (id: $VCLGROUP_ID)"
 VCLGROUP_ID=$(vcli_run vclgroup compile "$VCLGROUP_ID")
 if [ "$VCLGROUP_ID" -eq "0" ] ; then
-	fail "Error, failed to compile VCL Group"
+	fail "Error, failed to compile VCL Group $VCLGROUP"
 else
-	echo "Success: VCL Group compiled"
+	echo "Success: VCL Group $VCLGROUP compiled"
 fi
 
 ### Deploy the VCL Group ##
@@ -179,7 +180,7 @@ fi
 echo "Deploying VCL Group $VCLGROUP (id: $VCLGROUP_ID)"
 VCLGROUP_ID=$(vcli_run vclgroup deploy "$VCLGROUP_ID")
 if [ "$VCLGROUP_ID" -eq "0" ] ; then
-	fail "Error, failed to deploy VCL Group"
+	fail "Error, failed to deploy VCL Group $VCLGROUP"
 else
-	echo "Success: VCL Group deployed"
+	echo "Success: VCL Group $VCLGROUP deployed "
 fi
