@@ -5,7 +5,6 @@
 #TODO: Add support for multiple paths in VCL_PATH
 #TODO: Add support for shared deployments
 #TODO: Add support for routing rules
-#TODO: Add defaults (-g vclireload, -t vclireload -f default.vcl, -p $CWD)
 #TODO: Don't update deployment if using default tag
 #TODO: Add test suite
 
@@ -14,7 +13,7 @@ usage() {
 	printf 'Error: %s.\n\n' "$1"
 
 	cat <<-EOF
-	Usage: $SCRIPT -g <VCL Group> -t <tags> -f <Main VCL> -p <VCL Path>
+	Usage: $SCRIPT [options]
 	       $SCRIPT -h
 
 	Connect to Varnish Controller and (re)deploy a VCL Group. This script
@@ -22,10 +21,10 @@ usage() {
 	installed.
 
 	Available options:
-	-g           : Name of the VCL Group
-	-t           : Deployment tags
-	-f           : Name of the Main VCL
-	-p           : Path to VCL directory
+	-g           : Name of the VCL Group (Default: vclireload)
+	-t           : Comma separated list of tags (Default: vclireload)
+	-m           : Name of the Main VCL (Default: main.vcl)
+	-p           : Path to VCL directory (Default: CWD)
 	-d           : (Reserved) Domains
 	-h           : show this help and exit
 
@@ -50,22 +49,22 @@ vcli_run() {
 	(vcli "$@" --csv) | awk_id
 }
 
-while getopts h:p:f:g:t: OPT
+while getopts h:p:m:g:t: OPT
 do
 	case $OPT in
 	h) usage ;;
 	g) VCLGROUP=$OPTARG ;;
 	t) TAGS=$OPTARG ;;
-	f) MAIN_VCL=$OPTARG ;;
+	m) MAIN_VCL=$OPTARG ;;
 	p) VCL_PATH=$OPTARG ;;
 	*) usage "wrong usage" >&2 ;;
 	esac
 done
 
-test -z "$VCLGROUP" && usage "-g <VCL Group> is required" >&2
-test -z "$TAGS" && usage "-t <tags> is required" >&2
-test -z "$MAIN_VCL" && usage "-f <Main VCL> is required" >&2
-test -z "$VCL_PATH" && usage "-p <VCL Path> is required" >&2
+test -z "$VCLGROUP" && VCLGROUP="vclireload"
+test -z "$TAGS" && TAGS="vclireload"
+test -z "$MAIN_VCL" && MAIN_VCL="main.vcl"
+test -z "$VCL_PATH" && VCL_PATH="$PWD"
 
 echo "Reloading VCL Group $VCLGROUP (Main VCL: $MAIN_VCL, VCL path: $VCL_PATH, tags: $TAGS)"
 
