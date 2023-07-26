@@ -3,7 +3,6 @@
 #TODO: Feature request: vcli --quiet option
 #TODO: Feature request: vcli return id option
 #TODO: Add support for multiple paths in VCL_PATH
-#TODO: Add support for shared deployments
 #TODO: Add support for routing rules
 #TODO: Don't update deployment if using default tag
 #TODO: Add test suite
@@ -21,11 +20,11 @@ usage() {
 	installed.
 
 	Available options:
-	-g           : Name of the VCL Group (Default: vclireload)
-	-t           : Comma separated list of tags (Default: vclireload)
-	-m           : Name of the Main VCL (Default: main.vcl)
-	-p           : Path to VCL directory (Default: CWD)
-	-d           : (Reserved) Domains
+	-g           : VCL Group name (Default: vclireload)
+	-m           : Main VCL name (Default: main.vcl)
+	-t           : Tags (Default: vclireload)
+	-d           : Domains (Default: none)
+	-p           : VCL directory path (Default: cwd)
 	-h           : show this help and exit
 
 	EOF
@@ -49,7 +48,7 @@ vcli_run() {
 	(vcli "$@" --csv) | awk_id
 }
 
-while getopts h:p:m:g:t: OPT
+while getopts h:p:m:g:t:d: OPT
 do
 	case $OPT in
 	h) usage ;;
@@ -57,6 +56,7 @@ do
 	t) TAGS=$OPTARG ;;
 	m) MAIN_VCL=$OPTARG ;;
 	p) VCL_PATH=$OPTARG ;;
+	d) DOMAIN_LIST=$OPTARG ;;
 	*) usage "wrong usage" >&2 ;;
 	esac
 done
@@ -66,7 +66,11 @@ test -z "$TAGS" && TAGS="vclireload"
 test -z "$MAIN_VCL" && MAIN_VCL="main.vcl"
 test -z "$VCL_PATH" && VCL_PATH="$PWD"
 
-echo "Reloading VCL Group $VCLGROUP (Main VCL: $MAIN_VCL, VCL path: $VCL_PATH, tags: $TAGS)"
+if [ -z "$DOMAIN_LIST" ] ; then
+	echo "Reloading root VCL Group $VCLGROUP (Main VCL: $MAIN_VCL, VCL Path: $VCL_PATH, Tags: $TAGS)"
+else
+	echo "Reloading shared VCL Group $VCLGROUP (Main VCL: $MAIN_VCL, VCL Path: $VCL_PATH, Tags: $TAGS, Domains: $DOMAIN_LIST)"
+fi
 
 DEPLOYMENT="${VCLGROUP}_dc"
 VCL_LIST=$(ls $VCL_PATH | grep .*\.vcl)
@@ -130,6 +134,37 @@ do
 	fi
 done
 
+### Add Domains ###
+
+for DOMAIN in ${DOMAIN_LIST//,/ }
+do
+	DOMAIN_ID=$(vcli_run_quiet domains ls -f fqdn="$DOMAIN")
+	if [ "$DOMAIN_ID" -eq "0" ] ; then
+		echo "Adding domain $DOMAIN"
+		DOMAIN_ID=$(vcli_run domains add "$DOMAIN")
+	fi
+
+	if [ "$DOMAIN_ID" -eq "0" ] ; then
+		fail "Error, failed to add domain $DOMAIN"
+	else
+		echo "Success: Domain $DOMAIN has id $DOMAIN_ID"
+	fi
+
+	if [ -z "$DOMAIN_ID_LIST" ] ; then
+		DOMAIN_ID_LIST="$DOMAIN_ID"
+	else
+		DOMAIN_ID_LIST="$DOMAIN_ID_LIST,$DOMAIN_ID"
+	fi
+done
+
+### Select Deployment Type ###
+
+if [ -z "$DOMAIN_ID_LIST" ] ; then
+	DEPLOYMENT_TYPE="--root"
+else
+	DEPLOYMENT_TYPE="--dom $DOMAIN_ID_LIST"
+fi
+
 ### Add/update Deployment ###
 
 DEPLOYMENT_ID=$(vcli_run_quiet deployment ls -f name="$DEPLOYMENT")
@@ -151,11 +186,11 @@ fi
 
 VCLGROUP_ID=$(vcli_run_quiet vclgroup ls -f name="$VCLGROUP")
 if [ "$VCLGROUP_ID" -eq "0" ] ; then
-	echo "Adding VCL Group $VCLGROUP (--dep $DEPLOYMENT_ID --vcl $MAIN_VCL_ID --inc $INCLUDES_ID --root)"
-	VCLGROUP_ID=$(vcli_run vclgroup add "$VCLGROUP" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" --inc "$INCLUDES_ID" --root)
+	echo "Adding VCL Group $VCLGROUP (--dep $DEPLOYMENT_ID --vcl $MAIN_VCL_ID --inc $INCLUDES_ID $DEPLOYMENT_TYPE)"
+	VCLGROUP_ID=$(vcli_run vclgroup add "$VCLGROUP" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" --inc "$INCLUDES_ID" $DEPLOYMENT_TYPE)
 else
-	echo "Updating VCL Group $VCLGROUP (id: $VCLGROUP_ID --dep $DEPLOYMENT_ID --vcl $MAIN_VCL_ID --inc $INCLUDES_ID --root)"
-	VCLGROUP_ID=$(vcli_run vclgroup update "$VCLGROUP_ID" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" --inc "$INCLUDES_ID" --root --yes)
+	echo "Updating VCL Group $VCLGROUP (id: $VCLGROUP_ID --dep $DEPLOYMENT_ID --vcl $MAIN_VCL_ID --inc $INCLUDES_ID $DEPLOYMENT_TYPE)"
+	VCLGROUP_ID=$(vcli_run vclgroup update "$VCLGROUP_ID" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" --inc "$INCLUDES_ID" $DEPLOYMENT_TYPE --yes)
 fi
 
 if [ "$VCLGROUP_ID" -eq "0" ] ; then

@@ -2,7 +2,7 @@
 
 It's `varnishreload`, but for the Varnish Controller.
 
-This script aims to simplify automated VCL deployments through the Varnish Controller API. It currently only supports root deployments, but will eventually support shared deployments as well.
+This script aims to simplify automated VCL deployments through the Varnish Controller API. Create dedicated or shared deployments and keep them updated by running the script from your machine, a GitHub Action, or any other deployment pipeline.
 
 ## Usage
 
@@ -12,10 +12,11 @@ vclireload [options]
 
 **Options:**
 
-- `-g`: Name of the VCL Group (Default: `vclireload`)
-- `-t`: Comma separated list of tags (Default: `vclireload`)
-- `-m`: Name of the Main VCL (Default: `main.vcl`)
-- `-p`: Path to VCL directory (Default: `$cwd`)
+- `-g`: VCL Group name (Default: `vclireload`)
+- `-m`: Main VCL name (Default: `main.vcl`)
+- `-t`: Tags (Default: `vclireload`)
+- `-d`: Domains (Default: `none`)
+- `-p`: VCL directory path (Default: `cwd`)
 
 **Example Usage:**
 
@@ -32,8 +33,11 @@ vclireload -g example -m example.vcl
 # Define custom tags for the deployment
 vclireload -g example -m example.vcl -t tag1,tag2
 
+# Define a shared deployment for example.com and test.com
+vclireload -g example -m example.vcl -t tag1,tag2 -d example.com,test.com
+
 # Use a different VCL directory than CWD
-vclireload -g example -m example.vcl -t tag1,tag2 -p /tmp/vcl
+vclireload -g example -m example.vcl -t tag1,tag2 -d example.com -p /tmp/vcl
 ```
 
 **See it in action:**
@@ -48,7 +52,7 @@ Given the following directory structure:
 Running the script for the first time, we get the following output:
 ```
 alve@alvepad:~$ cd /tmp/vcl && vclireload
-Reloading VCL Group vclireload (Main VCL: main.vcl, VCL path: /tmp/vcl, tags: vclireload)
+Reloading root VCL Group vclireload (Main VCL: main.vcl, VCL path: /tmp/vcl, tags: vclireload)
 Configuration saved to: /home/alve/.vcli.yml
 Login successful.
 Adding File /tmp/vcl/main.vcl
@@ -66,11 +70,13 @@ Deploying VCL Group vclireload (id: 6)
 Success: VCL Group vclireload deployed
 ```
 
-The result is that all files in `/tmp/vcl` that end in `.vcl` are added to the Controller, and a VCL Group called `vclireload` is created and deployed. Running it again, we can see that the relevant resources are updated and redeployed:
+All files in `/tmp/vcl` (with the`.vcl` extension) are added to the Controller, and a VCL Group called `vclireload` is created and deployed. Since no domains have been defined, we end up with a root deployment.
+
+Running it again, we can see that the relevant resources are updated and redeployed:
 
 ```
 alve@alvepad:~$ cd /tmp/vcl && vclireload
-Reloading VCL Group vclireload (Main VCL: main.vcl, VCL path: /tmp/vcl, tags: vclireload)
+Reloading root VCL Group vclireload (Main VCL: main.vcl, VCL path: /tmp/vcl, tags: vclireload)
 Configuration saved to: /home/alve/.vcli.yml
 Login successful.
 Updating File /tmp/vcl/main.vcl
@@ -88,7 +94,7 @@ Deploying VCL Group vclireload (id: 6)
 Success: VCL Group vclireload deployed
 ```
 
-When run for the first time, the script will prompt you to provide an API-GW endpoint, a username and a password. To avoid this prompt, you can set the following environment variables:
+When this script is run for the first time, you will be prompted for an API-GW endpoint, a username and a password. To avoid this prompt, you can instead set the following environment variables:
 ```
 VARNISH_CONTROLLER_CLI_USERNAME=<username>
 VARNISH_CONTROLLER_CLI_PASSWORD=<password>
