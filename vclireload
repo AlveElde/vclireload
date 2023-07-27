@@ -53,7 +53,7 @@ do
 	case $OPT in
 	h) usage ;;
 	g) VCLGROUP=$OPTARG ;;
-	t) TAGS=$OPTARG ;;
+	t) TAG_LIST=$OPTARG ;;
 	m) MAIN_VCL=$OPTARG ;;
 	p) VCL_PATH=$OPTARG ;;
 	d) DOMAIN_LIST=$OPTARG ;;
@@ -62,14 +62,14 @@ do
 done
 
 test -z "$VCLGROUP" && VCLGROUP="vclireload"
-test -z "$TAGS" && TAGS="vclireload"
+test -z "$TAG_LIST" && TAG_LIST="vclireload"
 test -z "$MAIN_VCL" && MAIN_VCL="main.vcl"
 test -z "$VCL_PATH" && VCL_PATH="$PWD"
 
 if [ -z "$DOMAIN_LIST" ] ; then
-	echo "Reloading root VCL Group $VCLGROUP (Main VCL: $MAIN_VCL, VCL Path: $VCL_PATH, Tags: $TAGS)"
+	echo "Reloading root VCL Group $VCLGROUP (Main VCL: $MAIN_VCL, VCL Path: $VCL_PATH, Tags: $TAG_LIST)"
 else
-	echo "Reloading shared VCL Group $VCLGROUP (Main VCL: $MAIN_VCL, VCL Path: $VCL_PATH, Tags: $TAGS, Domains: $DOMAIN_LIST)"
+	echo "Reloading shared VCL Group $VCLGROUP (Main VCL: $MAIN_VCL, VCL Path: $VCL_PATH, Tags: $TAG_LIST, Domains: $DOMAIN_LIST)"
 fi
 
 DEPLOYMENT="${VCLGROUP}_dc"
@@ -113,7 +113,7 @@ test -z "$MAIN_VCL_ID" && fail "Main VCL $MAIN_VCL did not match any VCLs in $VC
 
 ### Add Tags ###
 
-for TAG in ${TAGS//,/ }
+for TAG in ${TAG_LIST//,/ }
 do
 	TAG_ID=$(vcli_run_quiet tags ls -f name="$TAG")
 	if [ "$TAG_ID" -eq "0" ] ; then
@@ -127,10 +127,10 @@ do
 		echo "Success: Tag $TAG has id $TAG_ID"
 	fi
 
-	if [ -z "$TAGS_ID" ] ; then
-		TAGS_ID="$TAG_ID"
+	if [ -z "$TAG_ID_LIST" ] ; then
+		TAG_ID_LIST="$TAG_ID"
 	else
-		TAGS_ID="$TAGS_ID,$TAG_ID"
+		TAG_ID_LIST="$TAG_ID_LIST,$TAG_ID"
 	fi
 done
 
@@ -169,11 +169,11 @@ fi
 
 DEPLOYMENT_ID=$(vcli_run_quiet deployment ls -f name="$DEPLOYMENT")
 if [ "$DEPLOYMENT_ID" -eq "0" ] ; then
-	echo "Adding Deployment $DEPLOYMENT (--tags $TAGS_ID)"
-	DEPLOYMENT_ID=$(vcli_run deployment add "$DEPLOYMENT" --tags "$TAGS_ID")
+	echo "Adding Deployment $DEPLOYMENT (--tags $TAG_ID_LIST)"
+	DEPLOYMENT_ID=$(vcli_run deployment add "$DEPLOYMENT" --tags "$TAG_ID_LIST")
 else
-	echo "Updating Deployment $DEPLOYMENT (id: $DEPLOYMENT_ID --tags $TAGS_ID)"
-	DEPLOYMENT_ID=$(vcli_run deployment update "$DEPLOYMENT_ID" --tags "$TAGS_ID" --yes)
+	echo "Updating Deployment $DEPLOYMENT (id: $DEPLOYMENT_ID --tags $TAG_ID_LIST)"
+	DEPLOYMENT_ID=$(vcli_run deployment update "$DEPLOYMENT_ID" --tags "$TAG_ID_LIST" --yes)
 fi
 
 if [ "$DEPLOYMENT_ID" -eq "0" ] ; then
