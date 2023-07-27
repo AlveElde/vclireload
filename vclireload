@@ -4,7 +4,6 @@
 #TODO: Feature request: vcli return id option
 #TODO: Add support for multiple paths in VCL_PATH
 #TODO: Add support for routing rules
-#TODO: Don't update deployment if using default tag
 #TODO: Add test suite
 
 usage() {
@@ -102,10 +101,10 @@ do
 
 	if [ "$VCL" = "$MAIN_VCL" ] ; then
 		MAIN_VCL_ID="$VCL_ID"
-	elif [ -z "$INCLUDES_ID" ] ; then
-		INCLUDES_ID="$VCL_ID"
+	elif [ -z "$INCLUDE_ID_LIST" ] ; then
+		INCLUDE_ID_LIST="$VCL_ID"
 	else
-		INCLUDES_ID="$INCLUDES_ID,$VCL_ID"
+		INCLUDE_ID_LIST="$INCLUDE_ID_LIST,$VCL_ID"
 	fi
 done
 
@@ -157,14 +156,6 @@ do
 	fi
 done
 
-### Select Deployment Type ###
-
-if [ -z "$DOMAIN_ID_LIST" ] ; then
-	DEPLOYMENT_TYPE="--root"
-else
-	DEPLOYMENT_TYPE="--dom $DOMAIN_ID_LIST"
-fi
-
 ### Add/update Deployment ###
 
 DEPLOYMENT_ID=$(vcli_run_quiet deployment ls -f name="$DEPLOYMENT")
@@ -182,15 +173,33 @@ else
 	echo "Success: Deployment $DEPLOYMENT has id $DEPLOYMENT_ID"
 fi
 
+### Determine include arg ###
+
+if [ -z "$INCLUDE_ID_LIST" ] ; then
+	INCLUDE_ID_ARG=""
+else
+	INCLUDE_ID_ARG="--inc $INCLUDE_ID_LIST"
+fi
+
+### Select deployment type ###
+
+if [ -z "$DOMAIN_ID_LIST" ] ; then
+	echo "Selecting root deployment type"
+	DEPLOYMENT_TYPE_ARG="--root"
+else
+	echo "Selecting shared deployment type"
+	DEPLOYMENT_TYPE_ARG="--dom $DOMAIN_ID_LIST"
+fi
+
 ### Add/update VCL Group ###
 
 VCLGROUP_ID=$(vcli_run_quiet vclgroup ls -f name="$VCLGROUP")
 if [ "$VCLGROUP_ID" -eq "0" ] ; then
-	echo "Adding VCL Group $VCLGROUP (--dep $DEPLOYMENT_ID --vcl $MAIN_VCL_ID --inc $INCLUDES_ID $DEPLOYMENT_TYPE)"
-	VCLGROUP_ID=$(vcli_run vclgroup add "$VCLGROUP" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" --inc "$INCLUDES_ID" $DEPLOYMENT_TYPE)
+	echo "Adding VCL Group $VCLGROUP (--dep $DEPLOYMENT_ID --vcl $MAIN_VCL_ID $INCLUDE_ID_ARG $DEPLOYMENT_TYPE_ARG)"
+	VCLGROUP_ID=$(vcli_run vclgroup add "$VCLGROUP" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" $INCLUDE_ID_ARG $DEPLOYMENT_TYPE_ARG)
 else
-	echo "Updating VCL Group $VCLGROUP (id: $VCLGROUP_ID --dep $DEPLOYMENT_ID --vcl $MAIN_VCL_ID --inc $INCLUDES_ID $DEPLOYMENT_TYPE)"
-	VCLGROUP_ID=$(vcli_run vclgroup update "$VCLGROUP_ID" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" --inc "$INCLUDES_ID" $DEPLOYMENT_TYPE --yes)
+	echo "Updating VCL Group $VCLGROUP (id: $VCLGROUP_ID --dep $DEPLOYMENT_ID --vcl $MAIN_VCL_ID $INCLUDE_ID_ARG $DEPLOYMENT_TYPE_ARG)"
+	VCLGROUP_ID=$(vcli_run vclgroup update "$VCLGROUP_ID" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" $INCLUDE_ID_ARG $DEPLOYMENT_TYPE_ARG --yes)
 fi
 
 if [ "$VCLGROUP_ID" -eq "0" ] ; then
