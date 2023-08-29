@@ -2,8 +2,10 @@
 
 #TODO: Feature request: vcli --quiet option
 #TODO: Feature request: vcli return id option
-#TODO: Add support for multiple paths in VCL_PATH
 #TODO: Add support for routing rules
+#TODO: Count the number of agents matching tags and deploy to all with new min
+#and max
+#TODO: Reduce the number of roundtrips needed (add several domains at once etc...)
 #TODO: Add test suite
 
 usage() {
@@ -21,9 +23,9 @@ usage() {
 	Available options:
 	-g           : VCL Group name (Default: vclireload)
 	-m           : Main VCL name (Default: main.vcl)
-	-t           : Tags (Default: vclireload)
-	-d           : Domains (Default: none)
-	-p           : VCL directory path (Default: cwd)
+	-t           : Tag(s) (Default: vclireload)
+	-d           : Domain(s) (Default: none)
+	-p           : VCL directory path(s) (Default: cwd)
 	-h           : show this help and exit
 
 	EOF
@@ -54,7 +56,7 @@ do
 	g) VCLGROUP=$OPTARG ;;
 	t) TAG_LIST=$OPTARG ;;
 	m) MAIN_VCL=$OPTARG ;;
-	p) VCL_PATH=$OPTARG ;;
+	p) VCL_PATH_LIST=$OPTARG ;;
 	d) DOMAIN_LIST=$OPTARG ;;
 	*) usage "wrong usage" >&2 ;;
 	esac
@@ -63,18 +65,23 @@ done
 test -z "$VCLGROUP" && VCLGROUP="vclireload"
 test -z "$TAG_LIST" && TAG_LIST="vclireload"
 test -z "$MAIN_VCL" && MAIN_VCL="main.vcl"
-test -z "$VCL_PATH" && VCL_PATH="$PWD"
+test -z "$VCL_PATH_LIST" && VCL_PATH_LIST="$PWD"
 
 if [ -z "$DOMAIN_LIST" ] ; then
-	echo "Reloading root VCL Group $VCLGROUP (Main VCL: $MAIN_VCL, VCL Path: $VCL_PATH, Tags: $TAG_LIST)"
+	echo "Reloading root VCL Group $VCLGROUP (Main VCL: $MAIN_VCL, VCL Paths: $VCL_PATH_LIST, Tags: $TAG_LIST)"
 else
-	echo "Reloading shared VCL Group $VCLGROUP (Main VCL: $MAIN_VCL, VCL Path: $VCL_PATH, Tags: $TAG_LIST, Domains: $DOMAIN_LIST)"
+	echo "Reloading shared VCL Group $VCLGROUP (Main VCL: $MAIN_VCL, VCL Paths: $VCL_PATH_LIST, Tags: $TAG_LIST, Domains: $DOMAIN_LIST)"
 fi
 
 DEPLOYMENT="${VCLGROUP}_dc"
-VCL_LIST=$(ls $VCL_PATH | grep .*\.vcl)
 
-test -z "$VCL_LIST" && fail "No VCLs found at $VCL_PATH"
+### Find VCL files ###
+
+VCL_PATH_LIST_SPACED=$(echo $VCL_PATH_LIST | sed -r 's/,/ /g')
+VCL_LIST=$(find $VCL_PATH_LIST_SPACED -maxdepth 1 -type f -name "*.vcl")
+test -z "$VCL_LIST" && fail "No VCLs found at $VCL_PATH_LIST"
+
+### Login to the Controller ###
 
 if ! vcli login; then
 	fail "Login failed"
@@ -84,22 +91,24 @@ fi
 
 for VCL in $VCL_LIST
 do
-	VCL_ID=$(vcli_run_quiet file ls -f name="$VCL")
+	VCL_REALPATH=$(realpath $VCL)
+	VCL_BASENAME=$(basename $VCL)
+	VCL_ID=$(vcli_run_quiet file ls -f name="$VCL_BASENAME")
 	if [ "$VCL_ID" -eq "0" ] ; then
-		echo "Adding File $VCL_PATH/$VCL"
-		VCL_ID=$(vcli_run file add "$VCL" "$VCL_PATH/$VCL")
+		echo "Adding File $VCL_REALPATH"
+		VCL_ID=$(vcli_run file add "$VCL_BASENAME" "$VCL_REALPATH")
 	else
-		echo "Updating File $VCL_PATH/$VCL"
-		VCL_ID=$(vcli_run file update "$VCL_ID" --file="$VCL_PATH/$VCL")
+		echo "Updating File $VCL_REALPATH"
+		VCL_ID=$(vcli_run file update "$VCL_ID" --file="$VCL_REALPATH")
 	fi
 
 	if [ "$VCL_ID" -eq "0" ] ; then
-		fail "Error, failed to add/update File $VCL_PATH/$VCL"
+		fail "Error, failed to add/update File $VCL_BASENAME"
 	else
-		echo "Success: File $VCL has id $VCL_ID"
+		echo "Success: File $VCL_BASENAME has id $VCL_ID"
 	fi
 
-	if [ "$VCL" = "$MAIN_VCL" ] ; then
+	if [ "$VCL_BASENAME" = "$MAIN_VCL" ] ; then
 		MAIN_VCL_ID="$VCL_ID"
 	elif [ -z "$INCLUDE_ID_LIST" ] ; then
 		INCLUDE_ID_LIST="$VCL_ID"
@@ -108,7 +117,7 @@ do
 	fi
 done
 
-test -z "$MAIN_VCL_ID" && fail "Main VCL $MAIN_VCL did not match any VCLs in $VCL_PATH"
+test -z "$MAIN_VCL_ID" && fail "Main VCL $MAIN_VCL did not match any VCLs in $VCL_PATH_LIST"
 
 ### Add Tags ###
 

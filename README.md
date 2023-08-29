@@ -14,9 +14,9 @@ vclireload [options]
 
 - `-g`: VCL Group name (Default: `vclireload`)
 - `-m`: Main VCL name (Default: `main.vcl`)
-- `-t`: Tags (Default: `vclireload`)
-- `-d`: Domains (Default: `none`)
-- `-p`: VCL directory path (Default: `cwd`)
+- `-t`: Tag(s) (Default: `vclireload`)
+- `-d`: Domain(s) (Default: `none`)
+- `-p`: VCL directory/file path(s) (Default: `cwd`)
 
 **Example Usage:**
 
@@ -38,6 +38,9 @@ vclireload -g example -m example.vcl -t tag1,tag2 -d example.com,test.com
 
 # Use a different VCL directory than CWD
 vclireload -g example -m example.vcl -t tag1,tag2 -d example.com -p /tmp/vcl
+
+# Deploy a single VCL file
+vclireload -g example -m example.vcl -p ./example.vcl
 ```
 
 **See it in action:**
@@ -103,3 +106,5 @@ VARNISH_CONTROLLER_CLI_ENDPOINT=<endpoint>
 ## Dependencies
 
 This tool only needs `varnish-controller-cli` installed locally to work. No other dependencies.
+
+Tested to work with version 5.2.3 of the Varnish Controller.
