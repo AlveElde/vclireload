@@ -41,12 +41,24 @@ awk_id() {
 	awk -F ',' 'BEGIN { id = 0 } { if (NR == 2) {id=$1; exit} } END { print id }'
 }
 
-vcli_run_quiet() {
-	(vcli "$@" 2> /dev/null --csv) | awk_id
+jq_find() {
+	for ROW_ENCODED in $(echo "$3" | jq -r '.[] | @base64'); do
+		ROW_DECODED=$(echo $ROW_ENCODED | base64 --decode)
+		if [ $(echo "$ROW_DECODED" | jq -r ".$1") = "$2" ] ; then
+			echo $(echo "$ROW_DECODED" | jq -r '.id')
+			return 0
+		fi
+	done
+
+	echo "0"
 }
 
 vcli_run() {
 	(vcli "$@" --csv) | awk_id
+}
+
+vcli_run_json() {
+	(vcli "$@" --json)
 }
 
 while getopts h:p:m:g:t:d: OPT
@@ -89,11 +101,13 @@ fi
 
 ### Add/update files ###
 
+VCL_JSON=$(vcli_run_json file ls)
+
 for VCL in $VCL_LIST
 do
 	VCL_REALPATH=$(realpath $VCL)
 	VCL_BASENAME=$(basename $VCL)
-	VCL_ID=$(vcli_run_quiet file ls -f name="$VCL_BASENAME")
+	VCL_ID=$(jq_find "name" "$VCL_BASENAME" "$VCL_JSON")
 	if [ "$VCL_ID" -eq "0" ] ; then
 		echo "Adding File $VCL_REALPATH"
 		VCL_ID=$(vcli_run file add "$VCL_BASENAME" "$VCL_REALPATH")
@@ -121,9 +135,11 @@ test -z "$MAIN_VCL_ID" && fail "Main VCL $MAIN_VCL did not match any VCLs in $VC
 
 ### Add Tags ###
 
+TAG_JSON=$(vcli_run_json tag ls)
+
 for TAG in ${TAG_LIST//,/ }
 do
-	TAG_ID=$(vcli_run_quiet tags ls -f name="$TAG")
+	TAG_ID=$(jq_find "name" "$TAG" "$TAG_JSON")
 	if [ "$TAG_ID" -eq "0" ] ; then
 		echo "Adding tag $TAG"
 		TAG_ID=$(vcli_run tags add "$TAG")
@@ -144,9 +160,11 @@ done
 
 ### Add Domains ###
 
+DOMAIN_JSON=$(vcli_run_json domains ls)
+
 for DOMAIN in ${DOMAIN_LIST//,/ }
 do
-	DOMAIN_ID=$(vcli_run_quiet domains ls -f fqdn="$DOMAIN")
+	DOMAIN_ID=$(jq_find "fqdn" "$DOMAIN" "$DOMAIN_JSON")
 	if [ "$DOMAIN_ID" -eq "0" ] ; then
 		echo "Adding domain $DOMAIN"
 		DOMAIN_ID=$(vcli_run domains add "$DOMAIN")
@@ -167,7 +185,9 @@ done
 
 ### Add/update Deployment ###
 
-DEPLOYMENT_ID=$(vcli_run_quiet deployment ls -f name="$DEPLOYMENT")
+DEPLOYMENT_JSON=$(vcli_run_json deployment ls)
+DEPLOYMENT_ID=$(jq_find "name" "$DEPLOYMENT" "$DEPLOYMENT_JSON")
+
 if [ "$DEPLOYMENT_ID" -eq "0" ] ; then
 	echo "Adding Deployment $DEPLOYMENT (--tags $TAG_ID_LIST)"
 	DEPLOYMENT_ID=$(vcli_run deployment add "$DEPLOYMENT" --tags "$TAG_ID_LIST")
@@ -202,7 +222,9 @@ fi
 
 ### Add/update VCL Group ###
 
-VCLGROUP_ID=$(vcli_run_quiet vclgroup ls -f name="$VCLGROUP")
+VCLGROUP_JSON=$(vcli_run_json vclgroup ls)
+VCLGROUP_ID=$(jq_find "name" "$VCLGROUP" "$VCLGROUP_JSON")
+
 if [ "$VCLGROUP_ID" -eq "0" ] ; then
 	echo "Adding VCL Group $VCLGROUP (--dep $DEPLOYMENT_ID --vcl $MAIN_VCL_ID $INCLUDE_ID_ARG $DEPLOYMENT_TYPE_ARG)"
 	VCLGROUP_ID=$(vcli_run vclgroup add "$VCLGROUP" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" $INCLUDE_ID_ARG $DEPLOYMENT_TYPE_ARG)
