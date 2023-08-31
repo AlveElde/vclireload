@@ -6,7 +6,6 @@
 #TODO: Count the number of agents matching tags and deploy to all with new min
 #and max
 #TODO: Add test suite
-#TODO: Avoid updating unchanged files
 
 usage() {
 	test $# -eq 1 &&
@@ -95,13 +94,22 @@ for VCL in $VCL_LIST
 do
 	VCL_REALPATH=$(realpath $VCL)
 	VCL_BASENAME=$(basename $VCL)
-	VCL_ID=$(echo $FILE_LS_JSON | jq_find '.name' "$VCL_BASENAME" | jq -r '.id')
+	VCL_JSON=$(echo $FILE_LS_JSON | jq_find '.name' "$VCL_BASENAME")
+	VCL_ID=$(echo $VCL_JSON | jq -r '.id')
+
 	if [ "$VCL_ID" -eq "0" ] ; then
 		echo "Adding File $VCL_REALPATH"
 		VCL_ID=$(vcli file add "$VCL_BASENAME" "$VCL_REALPATH" -j | jq_find '.name' "$VCL_BASENAME" | jq -r '.id')
 	else
-		echo "Updating File $VCL_REALPATH"
-		VCL_ID=$(vcli file update "$VCL_ID" --file="$VCL_REALPATH" -j | jq_find '.id' "$VCL_ID" | jq -r '.id')
+		VCL_SHA=$(echo $VCL_JSON | jq -r '.sha')
+		FILE_SHA=$(sha256sum -z "$VCL_REALPATH" | sed -r 's/ .*//')
+
+		if [ "$VCL_SHA" != "$FILE_SHA" ] ; then
+			echo "Updating File $VCL_REALPATH"
+			VCL_ID=$(vcli file update "$VCL_ID" --file="$VCL_REALPATH" -j | jq_find '.id' "$VCL_ID" | jq -r '.id')
+		else
+			echo "Skipping unchanged File $VCL_REALPATH"
+		fi
 	fi
 
 	if [ "$VCL_ID" -eq "0" ] ; then
