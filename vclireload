@@ -38,6 +38,10 @@ jq_find() {
 	jq -c --arg x "$1" --arg y "$2" 'if type=="array" then [.[]|select(.[$x]==$y)][0] else . end'
 }
 
+list_sort() {
+	tr ',' '\n' | sort -n | tr '\n' ',' | sed -r 's/^,|,$//g'
+}
+
 while getopts h:p:m:g:t:d: OPT
 do
 	case $OPT in
@@ -112,10 +116,8 @@ do
 
 	if [ "$VCL_BASENAME" = "$MAIN_VCL" ] ; then
 		MAIN_VCL_ID="$VCL_ID"
-	elif [ -z "$INCLUDE_ID_LIST" ] ; then
-		INCLUDE_ID_LIST="$VCL_ID"
 	else
-		INCLUDE_ID_LIST="$INCLUDE_ID_LIST,$VCL_ID"
+		INCLUDE_ID_LIST=$(echo "$VCL_ID,$INCLUDE_ID_LIST" | list_sort)
 	fi
 done
 
@@ -140,11 +142,8 @@ do
 		echo "Success: Tag $TAG has id $TAG_ID"
 	fi
 
-	if [ -z "$TAG_ID_LIST" ] ; then
-		TAG_ID_LIST="$TAG_ID"
-	else
-		TAG_ID_LIST="$TAG_ID_LIST,$TAG_ID"
-	fi
+	TAG_ID_LIST=$(echo "$TAG_ID,$TAG_ID_LIST" | list_sort)
+	TAG_ID_NAME_LIST=$(echo "($TAG_ID)$TAG,$TAG_ID_NAME_LIST" | list_sort)
 done
 
 ### Add Domains ###
@@ -167,26 +166,30 @@ do
 		echo "Success: Domain $DOMAIN has id $DOMAIN_ID"
 	fi
 
-	if [ -z "$DOMAIN_ID_LIST" ] ; then
-		DOMAIN_ID_LIST="$DOMAIN_ID"
-	else
-		DOMAIN_ID_LIST="$DOMAIN_ID_LIST,$DOMAIN_ID"
-	fi
+	DOMAIN_ID_LIST=$(echo "$DOMAIN_ID,$DOMAIN_ID_LIST" | list_sort)
 done
 
 ### Add/update Deployment ###
 
-DEPLOYMENT_ID=$(vcli dep ls -j | jq_find 'name' "$DEPLOYMENT" | jq -r '.id')
+DEPLOYMENT_LS_JSON=$(vcli dep ls -j)
+DEPLOYMENT_JSON=$(echo $DEPLOYMENT_LS_JSON | jq_find 'name' "$DEPLOYMENT")
+DEPLOYMENT_ID=$(echo $DEPLOYMENT_JSON | jq -r '.id')
 
 if [ "$DEPLOYMENT_ID" = 'null' ] ; then
 	echo "Adding Deployment $DEPLOYMENT (--tags $TAG_ID_LIST --max 128)"
 	VCLI_OUT_JSON=$(vcli dep add "$DEPLOYMENT" -t "$TAG_ID_LIST" --max 128 -j)
+	DEPLOYMENT_ID=$(echo "$VCLI_OUT_JSON" | jq_find 'name' "$DEPLOYMENT" | jq -r '.id')
 else
-	echo "Updating Deployment $DEPLOYMENT (id: $DEPLOYMENT_ID --tags $TAG_ID_LIST --max 128)"
-	VCLI_OUT_JSON=$(vcli dep update "$DEPLOYMENT_ID" -t "$TAG_ID_LIST" --max 128 -y -j)
-fi
+	DEPLOYMENT_TAG_LIST=$(echo "$DEPLOYMENT_JSON" | jq -r '.tags' | tr ' ' ',' | list_sort)
 
-DEPLOYMENT_ID=$(echo "$VCLI_OUT_JSON" | jq_find 'name' "$DEPLOYMENT" | jq -r '.id')
+	if [ "$DEPLOYMENT_TAG_LIST" != "$TAG_ID_NAME_LIST" ] ; then
+		echo "Updating Deployment $DEPLOYMENT (id: $DEPLOYMENT_ID --tags $TAG_ID_LIST --max 128)"
+		VCLI_OUT_JSON=$(vcli dep update "$DEPLOYMENT_ID" -t "$TAG_ID_LIST" --max 128 -y -j)
+		DEPLOYMENT_ID=$(echo "$VCLI_OUT_JSON" | jq_find 'id' "$DEPLOYMENT_ID" | jq -r '.id')
+	else
+		echo "Skipping unchanged Deployment $DEPLOYMENT (id: $DEPLOYMENT_ID --tags $TAG_ID_LIST --max 128)"
+	fi
+fi
 
 if [ "$DEPLOYMENT_ID" = 'null' ] ; then
 	fail "Error, failed to add/update deployment $DEPLOYMENT: $VCLI_OUT_JSON"
