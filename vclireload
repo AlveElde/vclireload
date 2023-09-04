@@ -1,7 +1,5 @@
 #!/bin/bash
 
-#TODO: Feature request: vcli --quiet option
-#TODO: Feature request: vcli return id option
 #TODO: Add support for routing rules
 #TODO: Count the number of agents matching tags and deploy to all with new min
 #and max
@@ -91,21 +89,23 @@ do
 
 	if [ "$VCL_ID" = 'null' ] ; then
 		echo "Adding File $VCL_REALPATH"
-		VCL_ID=$(vcli file add "$VCL_BASENAME" "$VCL_REALPATH" -j | jq_find 'name' "$VCL_BASENAME" | jq -r '.id')
+		VCLI_OUT_JSON=$(vcli file add "$VCL_BASENAME" "$VCL_REALPATH" -j)
+		VCL_ID=$(echo $VCLI_OUT_JSON | jq_find 'name' "$VCL_BASENAME" | jq -r '.id')
 	else
 		VCL_SHA=$(echo $VCL_JSON | jq -r '.sha')
 		FILE_SHA=$(sha256sum -z "$VCL_REALPATH" | sed -r 's/ .*//')
 
 		if [ "$VCL_SHA" != "$FILE_SHA" ] ; then
 			echo "Updating File $VCL_REALPATH"
-			VCL_ID=$(vcli file update "$VCL_ID" --file="$VCL_REALPATH" -j | jq_find 'id' "$VCL_ID" | jq -r '.id')
+			VCLI_OUT_JSON=$(vcli file update "$VCL_ID" --file="$VCL_REALPATH" -j)
+			VCL_ID=$(echo $VCLI_OUT_JSON | jq_find 'id' "$VCL_ID" | jq -r '.id')
 		else
 			echo "Skipping unchanged File $VCL_REALPATH"
 		fi
 	fi
 
 	if [ "$VCL_ID" = 'null' ] ; then
-		fail "Error, failed to add/update File $VCL_BASENAME"
+		fail "Error, failed to add/update File $VCL_BASENAME: $VCLI_OUT_JSON"
 	else
 		echo "Success: File $VCL_BASENAME has id $VCL_ID"
 	fi
@@ -130,11 +130,12 @@ do
 	TAG_ID=$(echo $TAG_JSON | jq_find 'name' "$TAG" | jq -r '.id')
 	if [ "$TAG_ID" = 'null' ] ; then
 		echo "Adding tag $TAG"
-		TAG_ID=$(vcli tag add "$TAG" -j | jq_find 'name' "$TAG" | jq -r '.id')
+		VCLI_OUT_JSON=$(vcli tag add "$TAG" -j)
+		TAG_ID=$(echo "$VCLI_OUT_JSON" | jq_find 'name' "$TAG" | jq -r '.id')
 	fi
 
 	if [ "$TAG_ID" = 'null' ] ; then
-		fail "Error, failed to add tag $TAG"
+		fail "Error, failed to add tag $TAG: $VCLI_OUT_JSON"
 	else
 		echo "Success: Tag $TAG has id $TAG_ID"
 	fi
@@ -153,13 +154,15 @@ DOMAIN_JSON=$(vcli domains ls -j)
 for DOMAIN in ${DOMAIN_LIST//,/ }
 do
 	DOMAIN_ID=$(echo $DOMAIN_JSON | jq_find 'fqdn' "$DOMAIN" | jq -r '.id')
+
 	if [ "$DOMAIN_ID" = 'null' ] ; then
 		echo "Adding domain $DOMAIN"
-		DOMAIN_ID=$(vcli domains add "$DOMAIN" -j | jq_find 'fqdn' "$DOMAIN" | jq -r '.id')
+		VCLI_OUT_JSON=$(vcli domains add "$DOMAIN" -j)
+		DOMAIN_ID=$(echo "$VCLI_OUT_JSON" | jq_find 'fqdn' "$DOMAIN" | jq -r '.id')
 	fi
 
 	if [ "$DOMAIN_ID" = 'null' ] ; then
-		fail "Error, failed to add domain $DOMAIN"
+		fail "Error, failed to add domain $DOMAIN: $VCLI_OUT_JSON"
 	else
 		echo "Success: Domain $DOMAIN has id $DOMAIN_ID"
 	fi
@@ -177,14 +180,16 @@ DEPLOYMENT_ID=$(vcli dep ls -j | jq_find 'name' "$DEPLOYMENT" | jq -r '.id')
 
 if [ "$DEPLOYMENT_ID" = 'null' ] ; then
 	echo "Adding Deployment $DEPLOYMENT (--tags $TAG_ID_LIST --max 128)"
-	DEPLOYMENT_ID=$(vcli dep add "$DEPLOYMENT" -t "$TAG_ID_LIST" --max 128 -j | jq_find 'name' "$DEPLOYMENT" | jq -r '.id')
+	VCLI_OUT_JSON=$(vcli dep add "$DEPLOYMENT" -t "$TAG_ID_LIST" --max 128 -j)
 else
 	echo "Updating Deployment $DEPLOYMENT (id: $DEPLOYMENT_ID --tags $TAG_ID_LIST --max 128)"
-	DEPLOYMENT_ID=$(vcli dep update "$DEPLOYMENT_ID" -t "$TAG_ID_LIST" --max 128 -y -j | jq_find 'id' "$DEPLOYMENT_ID" | jq -r '.id')
+	VCLI_OUT_JSON=$(vcli dep update "$DEPLOYMENT_ID" -t "$TAG_ID_LIST" --max 128 -y -j)
 fi
 
+DEPLOYMENT_ID=$(echo "$VCLI_OUT_JSON" | jq_find 'name' "$DEPLOYMENT" | jq -r '.id')
+
 if [ "$DEPLOYMENT_ID" = 'null' ] ; then
-	fail "Error, failed to add/update deployment $DEPLOYMENT"
+	fail "Error, failed to add/update deployment $DEPLOYMENT: $VCLI_OUT_JSON"
 else
 	echo "Success: Deployment $DEPLOYMENT has id $DEPLOYMENT_ID"
 fi
@@ -213,14 +218,16 @@ VCLGROUP_ID=$(vcli vclgroup ls -j | jq_find 'name' "$VCLGROUP" | jq -r '.id')
 
 if [ "$VCLGROUP_ID" = 'null' ] ; then
 	echo "Adding VCL Group $VCLGROUP (--dep $DEPLOYMENT_ID --vcl $MAIN_VCL_ID $INCLUDE_ID_ARG $DEPLOYMENT_TYPE_ARG)"
-	VCLGROUP_ID=$(vcli vclgroup add "$VCLGROUP" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" $INCLUDE_ID_ARG $DEPLOYMENT_TYPE_ARG -j | jq_find 'name' "$VCLGROUP" | jq -r '.id')
+	VCLI_OUT_JSON=$(vcli vclgroup add "$VCLGROUP" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" $INCLUDE_ID_ARG $DEPLOYMENT_TYPE_ARG -j)
 else
 	echo "Updating VCL Group $VCLGROUP (id: $VCLGROUP_ID --dep $DEPLOYMENT_ID --vcl $MAIN_VCL_ID $INCLUDE_ID_ARG $DEPLOYMENT_TYPE_ARG)"
-	VCLGROUP_ID=$(vcli vclgroup update "$VCLGROUP_ID" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" $INCLUDE_ID_ARG $DEPLOYMENT_TYPE_ARG --yes -j | jq_find 'id' "$VCLGROUP_ID" | jq -r '.id')
+	VCLI_OUT_JSON=$(vcli vclgroup update "$VCLGROUP_ID" --dep "$DEPLOYMENT_ID" --vcl "$MAIN_VCL_ID" $INCLUDE_ID_ARG $DEPLOYMENT_TYPE_ARG --yes -j)
 fi
 
+VCLGROUP_ID=$(echo "$VCLI_OUT_JSON" | jq_find 'name' "$VCLGROUP" | jq -r '.id')
+
 if [ "$VCLGROUP_ID" = 'null' ] ; then
-	fail "Error, failed to add/update VCL Group $VCLGROUP"
+	fail "Error, failed to add/update VCL Group $VCLGROUP: $VCLI_OUT_JSON"
 else
 	echo "Success: VCL Group $VCLGROUP has id $VCLGROUP_ID"
 fi
@@ -228,10 +235,11 @@ fi
 ### Compile the VCL Group ###
 
 echo "Compiling VCL Group $VCLGROUP (id: $VCLGROUP_ID)"
-VCLGROUP_ID=$(vcli vg compile "$VCLGROUP_ID" -j | jq_find 'vclgroupID' "$VCLGROUP_ID" | jq -r '.vclgroupID')
+VCLI_OUT_JSON=$(vcli vg compile "$VCLGROUP_ID" -j)
+VCLGROUP_ID=$(echo "$VCLI_OUT_JSON" | jq_find 'vclgroupID' "$VCLGROUP_ID" | jq -r '.vclgroupID')
 
 if [ "$VCLGROUP_ID" = 'null' ] ; then
-	fail "Error, failed to compile VCL Group $VCLGROUP"
+	fail "Error, failed to compile VCL Group $VCLGROUP: $VCLI_OUT_JSON"
 else
 	echo "Success: VCL Group $VCLGROUP compiled"
 fi
@@ -239,10 +247,11 @@ fi
 ### Deploy the VCL Group ##
 
 echo "Deploying VCL Group $VCLGROUP (id: $VCLGROUP_ID)"
-VCLGROUP_ID=$(vcli vg deploy "$VCLGROUP_ID" -j | jq_find 'id' "$VCLGROUP_ID" | jq -r '.id')
+VCLI_OUT_JSON=$(vcli vg deploy "$VCLGROUP_ID" -j)
+VCLGROUP_ID=$(echo "$VCLI_OUT_JSON" | jq_find 'id' "$VCLGROUP_ID" | jq -r '.id')
 
 if [ "$VCLGROUP_ID" = 'null' ] ; then
-	fail "Error, failed to deploy VCL Group $VCLGROUP"
+	fail "Error, failed to deploy VCL Group $VCLGROUP: $VCLI_OUT_JSON"
 else
 	echo "Success: VCL Group $VCLGROUP deployed "
 fi
