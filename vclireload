@@ -176,11 +176,11 @@ done
 DEPLOYMENT_ID=$(vcli dep ls -j | jq_find 'name' "$DEPLOYMENT" | jq -r '.id')
 
 if [ "$DEPLOYMENT_ID" = 'null' ] ; then
-	echo "Adding Deployment $DEPLOYMENT (--tags $TAG_ID_LIST)"
-	DEPLOYMENT_ID=$(vcli dep add "$DEPLOYMENT" -t "$TAG_ID_LIST" -j | jq_find 'name' "$DEPLOYMENT" | jq -r '.id')
+	echo "Adding Deployment $DEPLOYMENT (--tags $TAG_ID_LIST --max 128)"
+	DEPLOYMENT_ID=$(vcli dep add "$DEPLOYMENT" -t "$TAG_ID_LIST" --max 128 -j | jq_find 'name' "$DEPLOYMENT" | jq -r '.id')
 else
-	echo "Updating Deployment $DEPLOYMENT (id: $DEPLOYMENT_ID --tags $TAG_ID_LIST)"
-	DEPLOYMENT_ID=$(vcli dep update "$DEPLOYMENT_ID" -t "$TAG_ID_LIST" -y -j | jq_find 'id' "$DEPLOYMENT_ID" | jq -r '.id')
+	echo "Updating Deployment $DEPLOYMENT (id: $DEPLOYMENT_ID --tags $TAG_ID_LIST --max 128)"
+	DEPLOYMENT_ID=$(vcli dep update "$DEPLOYMENT_ID" -t "$TAG_ID_LIST" --max 128 -y -j | jq_find 'id' "$DEPLOYMENT_ID" | jq -r '.id')
 fi
 
 if [ "$DEPLOYMENT_ID" = 'null' ] ; then
