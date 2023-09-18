@@ -1,9 +1,8 @@
 #!/bin/bash
 
 #TODO: Add support for routing rules
-#TODO: Count the number of agents matching tags and deploy to all with new min
-#and max
 #TODO: Add test suite
+#TODO: Wait for deployment to succeed
 
 usage() {
 	test $# -eq 1 &&
@@ -239,10 +238,14 @@ fi
 
 echo "Compiling VCL Group $VCLGROUP (id: $VCLGROUP_ID)"
 VCLI_OUT_JSON=$(vcli vg compile "$VCLGROUP_ID" -j)
-VCLGROUP_ID=$(echo "$VCLI_OUT_JSON" | jq_find 'vclgroupID' "$VCLGROUP_ID" | jq -r '.vclgroupID')
+VCLGROUP_JSON=$(echo "$VCLI_OUT_JSON" | jq_find 'vclgroupID' "$VCLGROUP_ID")
+VCLGROUP_ID=$(echo "$VCLGROUP_JSON" | jq -r '.vclgroupID')
+VCLGROUP_RESPONSE=$(echo "$VCLGROUP_JSON" | jq -r '.response')
 
 if [ "$VCLGROUP_ID" = 'null' ] ; then
 	fail "Error, failed to compile VCL Group $VCLGROUP: $VCLI_OUT_JSON"
+elif [ "$VCLGROUP_RESPONSE" != "Successful" ] ; then
+	fail "Error, failed to compile VCL Group $VCLGROUP: $VCLGROUP_RESPONSE"
 else
 	echo "Success: VCL Group $VCLGROUP compiled"
 fi
