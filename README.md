@@ -54,48 +54,25 @@ Given the following directory structure:
 
 Running the script for the first time, we get the following output:
 ```
-alve@alvepad:~$ cd /tmp/vcl && vclireload
-Reloading root VCL Group vclireload (Main VCL: main.vcl, VCL path: /tmp/vcl, tags: vclireload)
+alve@hyperion:~$ vclireload -p /tmp/main.vcl
+Reloading root VCL Group vclireload (Main VCL: main.vcl, VCL Paths: /tmp/main.vcl, Tags: vclireload)
 Configuration saved to: /home/alve/.vcli.yml
 Login successful.
-Adding File /tmp/vcl/main.vcl
-Success: File main.vcl has id 6
-Adding File /tmp/vcl/utils.vcl
-Success: File utils.vcl has id 7
+Adding File /tmp/main.vcl
+Success: File main.vcl has id 74
 Success: Tag vclireload has id 6
-Adding Deployment vclireload_dc (--tags 6)
-Success: Deployment vclireload_dc has id 7
-Adding VCL Group vclireload (--dep 7 --vcl 6 --inc 7 --root)
-Success: VCL Group vclireload has id 6
-Compiling VCL Group vclireload (id: 6)
+Adding Deployment vclireload_dc (--tags 6 --max 128)
+Success: Deployment vclireload_dc has id 29
+Selecting root deployment type
+Adding VCL Group vclireload (--dep 29 --vcl 74  --root)
+Success: VCL Group vclireload has id 29
+Compiling VCL Group vclireload (id: 29)
 Success: VCL Group vclireload compiled
-Deploying VCL Group vclireload (id: 6)
+Deploying VCL Group vclireload (id: 29)
 Success: VCL Group vclireload deployed
 ```
 
 All files in `/tmp/vcl` (with the`.vcl` extension) are added to the Controller, and a VCL Group called `vclireload` is created and deployed. Since no domains have been defined, we end up with a root deployment.
-
-Running it again, we can see that the relevant resources are updated and redeployed:
-
-```
-alve@alvepad:~$ cd /tmp/vcl && vclireload
-Reloading root VCL Group vclireload (Main VCL: main.vcl, VCL path: /tmp/vcl, tags: vclireload)
-Configuration saved to: /home/alve/.vcli.yml
-Login successful.
-Updating File /tmp/vcl/main.vcl
-Success: File main.vcl has id 6
-Updating File /tmp/vcl/utils.vcl
-Success: File utils.vcl has id 7
-Success: Tag vclireload has id 6
-Updating Deployment vclireload_dc (id: 7 --tags 6)
-Success: Deployment vclireload_dc has id 7
-Updating VCL Group vclireload (id: 6 --dep 7 --vcl 6 --inc 7 --root)
-Success: VCL Group vclireload has id 6
-Compiling VCL Group vclireload (id: 6)
-Success: VCL Group vclireload compiled
-Deploying VCL Group vclireload (id: 6)
-Success: VCL Group vclireload deployed
-```
 
 When this script is run for the first time, you will be prompted for an API-GW endpoint, a username and a password. To avoid this prompt, you can instead set the following environment variables:
 ```
@@ -103,8 +80,11 @@ VARNISH_CONTROLLER_CLI_USERNAME=<username>
 VARNISH_CONTROLLER_CLI_PASSWORD=<password>
 VARNISH_CONTROLLER_CLI_ENDPOINT=<endpoint>
 ```
+
 ## Dependencies
 
-This tool only needs `varnish-controller-cli` installed locally to work. No other dependencies.
+This tool needs `varnish-controller-cli` and `jq` to be installed locally.
 
-Tested to work with version 5.2.3 of the Varnish Controller.
+## Compatibility
+
+Tested to work with version 6.3.2 of the Varnish Controller.
