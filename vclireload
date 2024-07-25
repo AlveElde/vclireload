@@ -254,7 +254,7 @@ fi
 ### Deploy the VCL Group ##
 
 echo "Deploying VCL Group $VCLGROUP (id: $VCLGROUP_ID)"
-VCLI_OUT_JSON=$(vcli vg deploy "$VCLGROUP_ID" -j)
+VCLI_OUT_JSON=$(vcli vg deploy "$VCLGROUP_ID" -w 60s -j)
 VCLGROUP_ID=$(echo "$VCLI_OUT_JSON" | jq_find 'id' "$VCLGROUP_ID" | jq -r '.id')
 
 if [ "$VCLGROUP_ID" = 'null' ] ; then
