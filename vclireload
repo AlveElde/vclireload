@@ -96,11 +96,12 @@ do
 		VCL_ID=$(echo $VCLI_OUT_JSON | jq_find 'name' "$VCL_BASENAME" | jq -r '.id')
 	else
 		VCL_SHA=$(echo $VCL_JSON | jq -r '.sha')
+		VCL_STATE=$(echo $VCL_JSON | jq -r '.state')
 		FILE_SHA=$(sha256sum -z "$VCL_REALPATH" | sed -r 's/ .*//')
 
-		if [ "$VCL_SHA" != "$FILE_SHA" ] ; then
-			echo "Updating File $VCL_REALPATH"
-			VCLI_OUT_JSON=$(vcli file update "$VCL_ID" --file="$VCL_REALPATH" -j)
+		if test "$VCL_SHA" != "$FILE_SHA" || test "$VCL_STATE" != "Applied" ; then
+			echo "Updating File $VCL_REALPATH (id: $VCL_ID)"
+			VCLI_OUT_JSON=$(vcli file update "$VCL_ID" --file="$VCL_REALPATH" -y -j)
 			VCL_ID=$(echo $VCLI_OUT_JSON | jq_find 'id' "$VCL_ID" | jq -r '.id')
 		else
 			echo "Skipping unchanged File $VCL_REALPATH"
