@@ -59,6 +59,18 @@ test -z "$TAG_LIST" && TAG_LIST="vclireload"
 test -z "$MAIN_VCL" && MAIN_VCL="main.vcl"
 test -z "$VCL_PATH_LIST" && VCL_PATH_LIST="$PWD"
 
+### Find VCL files ###
+
+VCL_PATH_LIST_SPACED=$(echo $VCL_PATH_LIST | sed -r 's/,/ /g')
+VCL_LIST=$(find $VCL_PATH_LIST_SPACED -maxdepth 1 -type f -name "*.vcl")
+test -z "$VCL_LIST" && fail "No VCLs found at $VCL_PATH_LIST"
+
+### Derive Main VCL ###
+
+if [ $(wc -l <<< "$VCL_LIST") = "1" ] ; then
+	MAIN_VCL=$(basename $VCL_LIST)
+fi
+
 if [ -z "$DOMAIN_LIST" ] ; then
 	echo "Reloading root VCL Group $VCLGROUP (Main VCL: $MAIN_VCL, VCL Paths: $VCL_PATH_LIST, Tags: $TAG_LIST)"
 else
@@ -66,12 +78,6 @@ else
 fi
 
 DEPLOYMENT="${VCLGROUP}_dc"
-
-### Find VCL files ###
-
-VCL_PATH_LIST_SPACED=$(echo $VCL_PATH_LIST | sed -r 's/,/ /g')
-VCL_LIST=$(find $VCL_PATH_LIST_SPACED -maxdepth 1 -type f -name "*.vcl")
-test -z "$VCL_LIST" && fail "No VCLs found at $VCL_PATH_LIST"
 
 ### Login to the Controller ###
 
